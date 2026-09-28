@@ -66,7 +66,9 @@ SPOOL_FLANGE_R = 12.0
 SERVO_L, SERVO_W = 23.2, 12.9     # карман под SG90 / MG90S (с зазором)
 SERVO_TAB_H = 20.0                # глубина гнезда: от ушек серво вверх (SG90 ~16, MG90S ~18.5 — с запасом)
 SERVO_SCREW_SPACING = 27.8
-STACK = 30.5                      # крепёж к раме по шаблону стека (30.5 или 20)
+MOUNT_HOLES = (52.6, 37.0)        # болты крепления к раме: длина × ширина (замер), M3
+MOUNT_BOLT_D = 3.3
+SERVO_SHAFT_OFF = 5.5             # вал SG90/MG90S смещён от центра корпуса к одному торцу
 # --------------------------------------------------------------------------
 
 PIV = np.array([0.0, 0.0, -PIVOT_DEPTH])
@@ -247,27 +249,38 @@ def make_spool():
 
 # ---------------------------------------------------------------- крепление серво
 def make_servo_mount():
-    plate_t = 2.5
-    half = STACK / 2 + 4.5
-    plate = box(-half, half, -half, half, -plate_t, 0)
+    """Пластина на 4 болта рамы, гнездо серво снизу. Корпус серво сдвинут так,
+    чтобы вал (и катушка) был точно в центре между болтами — все 4 нити равной
+    длины. Вал — со стороны метки-выемки на ухе."""
+    plate_t = 3.0
+    hx, hy = MOUNT_HOLES[0] / 2, MOUNT_HOLES[1] / 2
+    plate = box(-hx - 4.5, hx + 4.5, -hy - 4.5, hy + 4.5, -plate_t, 0)
+    cx = -SERVO_SHAFT_OFF                      # центр корпуса серво
     ox, oy = SERVO_L / 2 + 2, SERVO_W / 2 + 2
-    sleeve = box(-ox, ox, -oy, oy, -SERVO_TAB_H, 0)
+    sleeve = box(cx - ox, cx + ox, -oy, oy, -SERVO_TAB_H, 0)
     wx = SERVO_SCREW_SPACING / 2 + 3
     # «уши» под винты серво со скосом 45° к пластине — печатаются без поддержек
     wings = M.batch_hull([
-        box(-wx, wx, -oy, oy, -SERVO_TAB_H, -SERVO_TAB_H + 7),
-        box(-ox, ox, -oy, oy, -SERVO_TAB_H + 7 + (wx - ox), -SERVO_TAB_H + 7 + (wx - ox) + 0.1),
+        box(cx - wx, cx + wx, -oy, oy, -SERVO_TAB_H, -SERVO_TAB_H + 7),
+        box(cx - ox, cx + ox, -oy, oy, -SERVO_TAB_H + 7 + (wx - ox), -SERVO_TAB_H + 7 + (wx - ox) + 0.1),
     ])
-    body = union([plate, sleeve, wings])
-    cuts = [box(-SERVO_L / 2, SERVO_L / 2, -SERVO_W / 2, SERVO_W / 2, -SERVO_TAB_H - 1, 1)]
+    # рёбра жёсткости от гнезда к болтам по длинной стороне
+    ribs = union([box(-hx, hx, -1.2, 1.2, -plate_t - 4, -plate_t + 0.01) - box(cx - ox + 0.5, cx + ox - 0.5, -2, 2, -9, 1)])
+    body = union([plate, sleeve, wings, ribs])
+    cuts = [box(cx - SERVO_L / 2, cx + SERVO_L / 2, -SERVO_W / 2, SERVO_W / 2, -SERVO_TAB_H - 1, 1)]
     for sx in (-1, 1):
-        cuts.append(cyl_z(0.8, -SERVO_TAB_H - 1, -SERVO_TAB_H + 6, sx * SERVO_SCREW_SPACING / 2, 0, 16))
+        cuts.append(cyl_z(0.8, -SERVO_TAB_H - 1, -SERVO_TAB_H + 6, cx + sx * SERVO_SCREW_SPACING / 2, 0, 16))
         for sy in (-1, 1):
-            cuts.append(cyl_z(1.65, -plate_t - 1, 1, sx * STACK / 2, sy * STACK / 2, 32))
-    # вырезы под провод серво с обоих торцов (у разных серво провод выходит по-разному)
+            cuts.append(cyl_z(MOUNT_BOLT_D / 2, -plate_t - 5, 1, sx * hx, sy * hy, 32))
+            # место под головку болта / гайку
+            cuts.append(cyl_z(3.2, -plate_t - 6, -plate_t + 0.01, sx * hx, sy * hy, 32))
+    # вырезы под провод серво с обоих торцов
     for sx in (-1, 1):
-        cuts.append(box(sx * (SERVO_L / 2 - 1) - (0 if sx > 0 else ox - SERVO_L / 2 + 2),
-                        sx * (SERVO_L / 2 - 1) + (ox - SERVO_L / 2 + 2 if sx > 0 else 0), -3, 3, -8, 1))
+        x0 = cx + sx * (SERVO_L / 2 - 1)
+        x1 = cx + sx * (ox + 1)
+        cuts.append(box(min(x0, x1), max(x0, x1), -3, 3, -8, 1))
+    # метка: выемка на ухе со стороны вала
+    cuts.append(M.cylinder(8, 1.5, 1.5, 3).rotate([0, 0, 180]).translate([cx + wx + 0.6, 0, -SERVO_TAB_H - 1]))
     return body - union(cuts)
 
 
