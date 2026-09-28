@@ -1,0 +1,326 @@
+<title>Посадка Колибри 2.5 кг</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#EEF0EC; --panel:#F8F9F6; --ink:#1C221F; --muted:#5B655F; --line:#C9CFC8; --grid:#DDE2DC;
+  --series:#0B7A8C; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b; --goodtx:#11691b; --warntx:#8a5a00; --crittx:#b02a2a;
+  --sans:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark; --bg:#141816; --panel:#1C211E; --ink:#E6EAE6; --muted:#9AA49E; --line:#343B37; --grid:#2A302C;
+  --series:#3CC3D6; --goodtx:#5FC08A; --warntx:#E0A94A; --crittx:#F07070;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark; --bg:#141816; --panel:#1C211E; --ink:#E6EAE6; --muted:#9AA49E; --line:#343B37; --grid:#2A302C;
+  --series:#3CC3D6; --goodtx:#5FC08A; --warntx:#E0A94A; --crittx:#F07070;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:28px 56px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+h1{font-size:clamp(26px,4vw,36px);line-height:1.1;margin:0;text-wrap:balance}
+h2{font-size:19px;margin:0 0 10px;text-wrap:balance}
+p{margin:0;max-width:70ch}
+.eyebrow{font:12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lead{color:var(--muted);font-size:16px}
+header{display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:16px}
+.verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:760px){.verdict{grid-template-columns:1fr}}
+.vcard{border-top:3px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.vcard.good{border-color:var(--good)} .vcard.warn{border-color:var(--warn)} .vcard.crit{border-color:var(--crit)}
+.vcard b{font-size:16px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 22px}
+.ctl{display:flex;flex-direction:column;gap:4px}
+.ctl label{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.ctl label output{font:600 13px var(--mono);color:var(--ink)}
+.ctl input[type=range]{accent-color:var(--series);width:100%}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;font:500 13px var(--sans);background:transparent;color:var(--ink);border:0;padding:7px 8px;cursor:pointer;border-left:1px solid var(--line)}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--series);outline-offset:2px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:620px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile span{font-size:12px;color:var(--muted)} .tile b{display:block;font:600 22px var(--mono);font-variant-numeric:tabular-nums}
+.chartbox{position:relative}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--panel);font:12px var(--mono);padding:4px 8px;border-radius:4px;white-space:nowrap;transform:translate(-50%,-120%)}
+.tablebox{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sans);white-space:nowrap}
+.chip i{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;font-style:normal;font-size:11px;color:#fff}
+.chip.good{color:var(--goodtx)} .chip.good i{background:var(--good)}
+.chip.warn{color:var(--warntx)} .chip.warn i{background:var(--warn);color:#1C221F}
+.chip.crit{color:var(--crittx)} .chip.crit i{background:var(--crit)}
+.matrix td,.matrix th{text-align:center}
+.matrix th:first-child,.matrix td:first-child{text-align:left}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+ul.plain{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.note{border-left:3px solid var(--warn);padding:10px 14px;background:var(--panel);border-radius:0 8px 8px 0}
+.small{font-size:13px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Симуляция удара · Mark4 10" · 4 ножки PETG 8×7 мм</div>
+  <h1>Посадка Колибри 2–2.5 кг: выдержат ли ножки</h1>
+  <p class="lead">Модель: дрон как масса на четырёх пружинах. Пружина каждой ножки — это пятка TPU, изгиб карбонового луча, сама ножка и шарнир, плюс грунт. По пиковой силе удара считается напряжение в каждой детали и запас прочности.</p>
+</header>
+
+<section class="verdict" aria-label="Итог">
+  <div class="vcard good"><span class="chip good"><i>✓</i>Выдержит</span><b>Ровная вертикальная посадка</b><p class="small">До 1.5 м/с на бетоне запас ≥ 1.6, на траве до 2 м/с запас ≥ 3. Слабое место — ось и уши шарнира.</p></div>
+  <div class="vcard crit"><span class="chip crit"><i>✕</i>Сложится</span><b>Посадка со сносом</b><p class="small">Уже при сносе 0.3 м/с трение пятки складывает заднюю ножку. Нужна сила нити 60–2000 Н, а серво держит только ~28 Н.</p></div>
+  <div class="vcard crit"><span class="chip crit"><i>✕</i>Сломается</span><b>Снос 1 м/с на бетоне</b><p class="small">Передняя ножка, зуб-упор и ось получают запас 0.4–0.5 при любой вертикальной скорости.</p></div>
+</section>
+
+<section class="panel" aria-label="Симуляция">
+  <div class="controls">
+    <div class="ctl"><label for="m">Масса дрона <output id="mO"></output></label><input id="m" type="range" min="2" max="2.5" step="0.1" value="2.5"></div>
+    <div class="ctl"><label for="vz">Скорость касания вниз <output id="vzO"></output></label><input id="vz" type="range" min="0.2" max="3" step="0.1" value="1"></div>
+    <div class="ctl"><label for="vh">Снос вбок при касании <output id="vhO"></output></label><input id="vh" type="range" min="0" max="1.5" step="0.1" value="0"></div>
+    <div class="ctl"><label>Поверхность</label><div class="seg" id="surface"><button data-v="concrete" aria-pressed="true">Бетон</button><button data-v="dirt" aria-pressed="false">Грунт</button><button data-v="grass" aria-pressed="false">Трава</button></div></div>
+    <div class="ctl"><label>Касание</label><div class="seg" id="legs"><button data-v="4" aria-pressed="true">4 ножки</button><button data-v="2" aria-pressed="false">2 ножки (с креном)</button></div></div>
+    <div class="ctl"><label>Пластик ножек и колодок</label><div class="seg" id="mat"><button data-v="PETG" aria-pressed="true">PETG</button><button data-v="PACF" aria-pressed="false">PA-CF</button></div></div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><span>пик на одну ножку</span><b id="tF"></b></div>
+    <div class="tile"><span>перегрузка</span><b id="tG"></b></div>
+    <div class="tile"><span>сила трения на пятке</span><b id="tH"></b></div>
+    <div class="tile"><span>длительность удара</span><b id="tT"></b></div>
+  </div>
+
+  <figure style="margin:0">
+    <figcaption class="small">Сила на одну ножку во время удара: Н по вертикали, миллисекунды по горизонтали</figcaption>
+    <div class="chartbox" id="chartbox"><svg id="chart" viewBox="0 0 720 220" role="img" aria-label="График силы на ножку по времени"></svg><div class="tip" id="tip" hidden></div></div>
+  </figure>
+
+  <div class="tablebox"><table>
+    <thead><tr><th>Деталь</th><th>Что нагружает</th><th>Нагрузка</th><th>Запас</th><th>Итог</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="small">Запас = допустимое напряжение / расчётное. ≥ 2 — выдержит, 1–2 — на пределе (повторные удары, дефекты печати), &lt; 1 — сломается.</p>
+</section>
+
+<section class="panel">
+  <h2>Карта сценариев: худшая деталь</h2>
+  <p class="small" id="mxCap"></p>
+  <div class="tablebox"><table class="matrix" id="matrix"></table></div>
+</section>
+
+<section class="cols">
+  <div>
+    <h2>Почему снос складывает ножку</h2>
+    <p>Ножка стоит в упоре на 95°, пятка на 6.4 мм внутрь от оси. Вертикальная сила прижимает ножку к упору с плечом 6.4 мм. Сила трения пятки действует на плече 72.7 мм. У задней по ходу сноса ножки трение тянет пятку наружу, в сторону складывания.</p>
+    <p style="margin-top:10px">Ножка начинает складываться, когда трение больше <b>6.4 / 72.7 ≈ 9 %</b> от вертикальной силы. У TPU по бетону трение 60 %. Дальше держит только нить, а она крепится к рычажку с плечом всего 3.4 мм. Серво MG90S через катушку Ø16 удерживает около 28 Н натяжения. Серво проворачивается, ножка складывается под дроном.</p>
+  </div>
+  <div>
+    <h2>Что сделать</h2>
+    <ul class="plain">
+      <li><b>Замок «через мёртвую точку».</b> Подкос из двух звеньев между ножкой и колодкой, как у шасси самолёта. В раскрытом положении колено подкоса уходит чуть за прямую линию и упирается. Удары в любую сторону идут в подкос, а не в нить и серво. Серво только переводит колено через точку, резинка складывает. Это главная доработка.</li>
+      <li><b>PA-CF вместо PETG</b> для ножек и колодок. Почти вдвое поднимает запас на вертикальной посадке.</li>
+      <li><b>Сажать без сноса.</b> До доработки: зависнуть, погасить снос, опуститься со скоростью до 1 м/с.</li>
+      <li><b>Пятка — предохранитель.</b> Мягкая TPU 85A вместо 95A снижает пик удара на твёрдом покрытии.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="note">
+  <h2>Допущения модели</h2>
+  <ul class="plain">
+    <li>Жёсткость на ножку: пятка TPU 250 Н/мм, луч 11.22×8 мм на вылете 75 мм 170 Н/мм, ножка 1400 Н/мм, шарнир 600 Н/мм; грунт 60 Н/мм, трава 15 Н/мм. Демпфирование 15 %.</li>
+    <li>Моторы в момент касания не тянут. С газом удар мягче.</li>
+    <li>Допустимое напряжение: PETG 50 МПа, PA-CF 95 МПа, карбон 500 МПа. Нить кевлар 0.4 мм ~200 Н. Серво MG90S 0.22 Н·м.</li>
+    <li>Снос направлен вдоль луча (худший случай). Трение ограничено μ·N и силой, нужной, чтобы погасить снос за время удара.</li>
+    <li>Это оценка, а не МКЭ. Реальный запас зависит от печати: заполнение, температура, сцепление слоёв. Проверка — сброс с 5 см (≈1 м/с) и 11 см (≈1.5 м/с) на бетон.</li>
+  </ul>
+</section>
+</div>
+<script>
+// Модель посадки: 1 степень свободы, n ножек-пружин, демпфирование, трение пяток.
+const G = {
+  H: 72.7,      // мм, ось шарнира -> земля по вертикали
+  e: 6.4,       // мм, пятка смещена внутрь от оси (95°)
+  rSec: 10,     // мм, опасное сечение ножки от оси
+  Wx: 8*7*7/6,  // мм³, изгиб ножки в плоскости луча
+  Wy: 7*8*8/6,  // мм³, изгиб поперёк луча
+  rTooth: 6.3, toothArm: 2.3, Wtooth: 8*4.5*4.5/6,
+  earA: 2*3*3.1, hubA: 8*3.25,
+  armL: 75, Warm: 11.22*8*8/6,
+  threadArm: 3.39, spoolR: 8,
+};
+const SURF = { concrete: {k: 1e9, mu: 0.6}, dirt: {k: 60, mu: 0.5}, grass: {k: 15, mu: 0.4} };
+const MAT = { PETG: 50, PACF: 95 };
+function simulate(p) {
+  const kFoot = 250, kArm = 170, kLeg = 1400, kHinge = 600;       // Н/мм
+  const kG = SURF[p.surface].k;
+  const kLegTot = 1 / (1/kFoot + 1/kArm + 1/kLeg + 1/kHinge + 1/kG); // Н/мм
+  const n = p.legs, m = p.mass;
+  const K = n * kLegTot * 1000;       // Н/м
+  const zeta = 0.15, C = 2 * zeta * Math.sqrt(K * m);
+  let x = 0, v = p.vz, t = 0, dt = 2e-6, Fmax = 0; const trace = [];
+  while (t < 0.05) {
+    const F = Math.max(0, K * x + C * v);
+    const a = 9.81 - F / m;
+    v += a * dt; x += v * dt; t += dt;
+    if (x < 0 && t > 1e-4) break;
+    Fmax = Math.max(Fmax, F);
+    if (trace.length < 400 && Math.round(t / dt) % 25 === 0) trace.push([t * 1000, F / n]);
+  }
+  const F = Fmax / n;                          // пиковая сила на ножку, Н
+  const w = Math.sqrt(K / m);
+  const FhNeed = m * p.vh * w / (2 * n);       // сила, чтобы погасить снос
+  const Fh = Math.min(SURF[p.surface].mu * F, FhNeed);
+  const sinE = G.e / Math.hypot(G.e, G.H);
+  const L = Math.hypot(G.e, G.H) - G.rSec;
+  const sAllow = MAT[p.mat];
+  const r = {};
+  r.g = Fmax / m / 9.81; r.F = F; r.Fh = Fh; r.trace = trace; r.defl = x;
+  // ножка: передняя (трение внутрь) и боковая
+  const sLegFront = (F * sinE + Fh) * L / G.Wx;
+  const sLegSide = Fh * L / G.Wy;
+  r.leg = { s: Math.max(sLegFront, sLegSide), allow: sAllow };
+  // зуб-упор (передняя ножка: снос прижимает к упору)
+  const Ftooth = (F * G.e + Fh * G.H) / G.rTooth;
+  r.tooth = { s: Ftooth * G.toothArm / G.Wtooth, allow: sAllow, F: Ftooth };
+  // ось и уши (смятие)
+  const R = F + Ftooth;
+  r.ears = { s: R / G.earA, allow: sAllow };
+  // задняя ножка: снос складывает, держит нить и серво
+  const Mfold = Fh * G.H - F * G.e;
+  const T = Math.max(0, Mfold) / G.threadArm;
+  r.fold = { T, servoMax: p.servoTorque / (G.spoolR / 1000), threadMax: 200,
+             ratio: Fh / F, limit: G.e / G.H };
+  r.arm = { s: F * G.armL / G.Warm, allow: 500 };
+  return r;
+}
+</script>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const state = { mass: 2.5, vz: 1, vh: 0, surface: "concrete", legs: 4, mat: "PETG", servoTorque: 0.22 };
+  const fmt = (v, d=0) => v.toLocaleString("ru-RU", {minimumFractionDigits:d, maximumFractionDigits:d});
+
+  function status(sf){
+    if (sf >= 2) return ["good","✓","Выдержит"];
+    if (sf >= 1) return ["warn","!","На пределе"];
+    return ["crit","✕","Сломается"];
+  }
+  const chip = (cls, ic, txt) => `<span class="chip ${cls}"><i>${ic}</i>${txt}</span>`;
+
+  function rowsHTML(r){
+    const rows = [];
+    const add = (name, what, load, sf, override) => {
+      const st = override || status(sf);
+      rows.push(`<tr><td><b>${name}</b></td><td>${what}</td><td class="n">${load}</td><td class="n">${sf==null?"—":fmt(sf,2)}</td><td>${chip(...st)}</td></tr>`);
+    };
+    add("Ножка", "изгиб у ступицы: удар + трение пятки", fmt(r.leg.s,0)+" МПа", r.leg.allow/r.leg.s);
+    add("Зуб-упор", "прижат к колодке ударом и трением", fmt(r.tooth.F,0)+" Н", r.tooth.allow/r.tooth.s);
+    add("Ось M3 и уши колодки", "смятие пластика вокруг оси", fmt(r.ears.s,0)+" МПа", r.ears.allow/r.ears.s);
+    const T = r.fold.T;
+    let st, load;
+    if (T <= 0) { st = ["good","✓","Держит упор"]; load = "0 Н"; }
+    else if (T <= r.fold.servoMax) { st = ["good","✓","Серво держит"]; load = fmt(T,0)+" Н"; }
+    else if (T <= r.fold.threadMax) { st = ["crit","✕","Сложится"]; load = fmt(T,0)+" Н"; }
+    else { st = ["crit","✕","Сложится, рвёт нить"]; load = fmt(T,0)+" Н"; }
+    add("Нить и серво", `задняя ножка: трение складывает её, серво держит до ${fmt(r.fold.servoMax,0)} Н`, load, T<=0?null:r.fold.servoMax/T, st);
+    add("Карбоновый луч", "изгиб у пластины рамы", fmt(r.arm.s,0)+" МПа", r.arm.allow/r.arm.s);
+    rows.push(`<tr><td><b>Пятка TPU</b></td><td>сжатие при ударе</td><td class="n">${fmt(r.F/250,1)} мм</td><td class="n">—</td><td>${chip("good","✓","Выдержит")}</td></tr>`);
+    return rows.join("");
+  }
+
+  function worst(r){
+    if (r.fold.T > r.fold.servoMax) return {sf:null, st:["crit","✕","Сложится"]};
+    const sf = Math.min(r.leg.allow/r.leg.s, r.tooth.allow/r.tooth.s, r.ears.allow/r.ears.s, r.arm.allow/r.arm.s);
+    return {sf, st: status(sf)};
+  }
+
+  function drawChart(r){
+    const svg = $("chart"), W=720, H=220, L=52, R=16, T=14, B=34;
+    const pts = r.trace; if (!pts.length) return;
+    const tMax = Math.max(...pts.map(p=>p[0]));
+    const niceStep = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const n=v/p; return (n<=1.5?1:n<=3?2:n<=7?5:10)*p; };
+    const yStep = niceStep(r.F/4), yMax = Math.ceil(r.F*1.08/yStep)*yStep;
+    const xStep = niceStep(tMax/5), xMax = Math.ceil(tMax/xStep)*xStep;
+    const X = t => L + (W-L-R)*t/xMax, Y = f => T + (H-T-B)*(1-f/yMax);
+    let s = "";
+    for (let y=0; y<=yMax+1e-9; y+=yStep){ s += `<line x1="${L}" x2="${W-R}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--grid)" stroke-width="1"/><text x="${L-8}" y="${Y(y)+4}" text-anchor="end">${fmt(y)}</text>`; }
+    for (let x=0; x<=xMax+1e-9; x+=xStep){ s += `<text x="${X(x)}" y="${H-12}" text-anchor="middle">${fmt(x, xStep<1?1:0)}</text>`; }
+    const d = pts.map((p,i)=>(i?"L":"M")+X(p[0]).toFixed(1)+" "+Y(p[1]).toFixed(1)).join(" ");
+    s += `<path d="${d} L${X(pts[pts.length-1][0])} ${Y(0)} L${X(0)} ${Y(0)} Z" fill="var(--series)" fill-opacity=".10"/>`;
+    s += `<path d="${d}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round"/>`;
+    const pk = pts.reduce((a,b)=>b[1]>a[1]?b:a);
+    s += `<circle cx="${X(pk[0])}" cy="${Y(pk[1])}" r="4.5" fill="var(--series)" stroke="var(--panel)" stroke-width="2"/>`;
+    s += `<text x="${X(pk[0])+10}" y="${Y(pk[1])+4}" style="fill:var(--ink)">пик ${fmt(pk[1])} Н</text>`;
+    s += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H-B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+    s += `<circle id="xd" r="4" fill="var(--series)" stroke="var(--panel)" stroke-width="2" visibility="hidden"/>`;
+    s += `<rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent" id="hit"/>`;
+    svg.innerHTML = s;
+    const tip = $("tip"), box = $("chartbox");
+    const hit = $("hit");
+    function move(ev){
+      const rect = svg.getBoundingClientRect();
+      const px = (ev.clientX - rect.left) * W / rect.width;
+      const t = Math.max(0, Math.min(xMax, (px - L) / (W-L-R) * xMax));
+      let best = pts[0]; for (const p of pts) if (Math.abs(p[0]-t) < Math.abs(best[0]-t)) best = p;
+      const cx = X(best[0]), cy = Y(best[1]);
+      $("xh").setAttribute("x1",cx); $("xh").setAttribute("x2",cx); $("xh").setAttribute("visibility","visible");
+      $("xd").setAttribute("cx",cx); $("xd").setAttribute("cy",cy); $("xd").setAttribute("visibility","visible");
+      tip.hidden = false; tip.textContent = `${fmt(best[0],1)} мс · ${fmt(best[1])} Н`;
+      tip.style.left = (cx * rect.width / W) + "px"; tip.style.top = (cy * rect.height / H) + "px";
+    }
+    hit.addEventListener("pointermove", move);
+    hit.addEventListener("pointerleave", ()=>{ tip.hidden = true; $("xh").setAttribute("visibility","hidden"); $("xd").setAttribute("visibility","hidden"); });
+  }
+
+  function matrix(){
+    const vzs=[0.5,1,1.5,2,2.5], vhs=[0,0.3,0.6,1];
+    let h = `<thead><tr><th>Вниз \\ снос</th>${vhs.map(v=>`<th>${v?fmt(v,1)+" м/с":"без сноса"}</th>`).join("")}</tr></thead><tbody>`;
+    for (const vz of vzs){
+      h += `<tr><td class="n">${fmt(vz,1)} м/с</td>`;
+      for (const vh of vhs){
+        const w = worst(simulate({...state, vz, vh}));
+        h += `<td>${chip(...w.st)}${w.sf!=null?` <span class="small">${fmt(w.sf,2)}</span>`:""}</td>`;
+      }
+      h += "</tr>";
+    }
+    $("matrix").innerHTML = h + "</tbody>";
+    const surfName = {concrete:"бетон",dirt:"грунт",grass:"трава"}[state.surface];
+    $("mxCap").textContent = `Масса ${fmt(state.mass,1)} кг · ${surfName} · ${state.legs} ножки · ${state.mat==="PACF"?"PA-CF":"PETG"}. Число — запас самой слабой детали.`;
+  }
+
+  function update(){
+    $("mO").textContent = fmt(state.mass,1)+" кг";
+    $("vzO").textContent = fmt(state.vz,1)+" м/с (≈"+fmt(state.vz*state.vz/19.62*100,0)+" см падения)";
+    $("vhO").textContent = fmt(state.vh,1)+" м/с";
+    const r = simulate(state);
+    $("tF").textContent = fmt(r.F)+" Н";
+    $("tG").textContent = fmt(r.g,1)+" g";
+    $("tH").textContent = fmt(r.Fh)+" Н";
+    const tEnd = r.trace.length ? r.trace[r.trace.length-1][0] : 0;
+    $("tT").textContent = fmt(tEnd,1)+" мс";
+    $("rows").innerHTML = rowsHTML(r);
+    drawChart(r);
+    matrix();
+  }
+
+  for (const [id,key] of [["m","mass"],["vz","vz"],["vh","vh"]]) {
+    $(id).addEventListener("input", e => { state[key] = parseFloat(e.target.value); update(); });
+  }
+  for (const [id,key,num] of [["surface","surface",false],["legs","legs",true],["mat","mat",false]]) {
+    $(id).addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      for (const x of $(id).querySelectorAll("button")) x.setAttribute("aria-pressed", x===b ? "true":"false");
+      state[key] = num ? parseInt(b.dataset.v) : b.dataset.v; update();
+    });
+  }
+  update();
+})();
+</script>
