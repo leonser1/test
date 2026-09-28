@@ -1,5 +1,5 @@
 """
-Убирающиеся ножки для дрона «Колибри» — параметрический генератор STL.
+Убирающиеся ножки для дрона «Колибри» на раме Mark4 V3 10" — параметрический генератор STL.
 
 Схема: на середине каждого луча колодка с шарниром. Ножка сложена под лучом
 и прижата резинкой. Одна серво в центре наматывает 4 нити на катушку, нити
@@ -23,35 +23,41 @@ import trimesh
 M = m3d.Manifold
 SEG = 64
 
-# ---------------- ПАРАМЕТРЫ (мм) — подгоните под свою раму ----------------
-ARM_W = 12.0          # ширина луча
+# ---------------- ПАРАМЕТРЫ (мм) — рама Mark4 V3 10" ----------------------
+# Рама: колёсная база 427 мм (центр–мотор 213.5), луч 7.5 мм, стек 30.5×30.5.
+# Колодка ставится на ~120 мм от центра рамы: сложенная ножка с пяткой
+# заканчивается на ~197 мм и не доходит до винтов мотора (213.5).
+ARM_W = 16.0          # ширина луча в месте установки колодки (ЗАМЕРЬТЕ!)
+ARM_W_VARIANTS = (14, 15, 16, 17, 18, 19, 20, 22)   # колодки под разные ширины
+ARM_T = 7.5           # толщина луча
 ARM_CLEAR = 0.4       # зазор посадки колодки на луч
 WALL = 2.4            # толщина боковых щёк колодки
-WALL_H = 4.0          # высота щёк, обнимающих луч сбоку
+WALL_H = 5.0          # высота щёк, обнимающих луч сбоку
 BASE_T = 2.5          # толщина основания колодки под лучом
-BLOCK_X0, BLOCK_X1 = -28.0, 38.0   # длина колодки относительно оси шарнира
+BLOCK_X0, BLOCK_X1 = -28.0, 40.0   # длина колодки относительно оси шарнира
 
-PIVOT_DEPTH = 6.5     # ось шарнира ниже луча
-PIN_D = 2.1           # отверстие в ушах под ось (винт M2 / спица 2 мм)
-HUB_R = 3.6           # радиус ступицы ножки
-HUB_W = 7.0           # ширина ножки (по Y)
-EAR_T = 2.5           # толщина ушей шарнира
+PIVOT_DEPTH = 7.5     # ось шарнира ниже луча
+PIN_D = 3.1           # отверстие в ушах под ось (винт M3)
+HUB_R = 4.5           # радиус ступицы ножки
+HUB_W = 8.0           # ширина ножки (по Y)
+EAR_T = 3.0           # толщина ушей шарнира
 EAR_GAP = HUB_W + 0.6
+EAR_R = 6.5           # радиус ушей вокруг оси
 
-LEG_LEN = 55.0        # длина стержня ножки от оси до конца (без пятки)
-LEG_T = 4.0           # толщина стержня ножки
+LEG_LEN = 68.0        # длина стержня ножки от оси до конца (без пятки)
+LEG_T = 5.5           # толщина стержня ножки
 LEVER_LEN = 12.0      # рычажок под нить
 LEVER_ANGLE = -60.0   # направление рычажка относительно ножки (в плоскости XZ)
-THREAD_HOLE = 1.6
-TOOTH_R = 5.5         # зуб-упор на ступице (упирается в основание на 95°)
-TOOTH_ANGLE = -112.0  # подобран проверкой --check, чтобы упор был на ~95°
-BAND_AT = 20.0        # проточка под резинку на ножке
+THREAD_HOLE = 1.8
+TOOTH_R = 6.8         # зуб-упор на ступице (упирается в основание на 95°)
+TOOTH_ANGLE = -116.5  # подобран проверкой --check, чтобы упор был на ~95°
+BAND_AT = 24.0        # проточка под резинку на ножке
 
 EYE_X = -24.0         # ушко-направляющая нити
-EYE_Z = -12.0
-POST_X = 34.0         # штыри под резинку
+EYE_Z = -13.5
+POST_X = 36.0         # штыри под резинку
 M3_X = -12.0          # отверстие M3 сквозь луч (необязательно)
-ZIP_X = (-16.0, 22.0) # канавки под хомуты 3.6 мм
+ZIP_X = (-16.0, 24.0) # канавки под хомуты 3.6 мм
 
 SPOOL_R = 8.0         # радиус барабана: ~15 мм нити за ~107° хода серво
 SPOOL_FLANGE_R = 12.0
@@ -62,7 +68,6 @@ SERVO_SCREW_SPACING = 27.8
 STACK = 30.5                      # крепёж к раме по шаблону стека (30.5 или 20)
 # --------------------------------------------------------------------------
 
-BLOCK_W = ARM_W + ARM_CLEAR + 2 * WALL
 PIV = np.array([0.0, 0.0, -PIVOT_DEPTH])
 
 
@@ -97,8 +102,9 @@ def radial_bar(angle_deg, r0, r1, width, thick):
 
 
 # ---------------------------------------------------------------- колодка
-def make_block():
-    half = BLOCK_W / 2
+def make_block(arm_w=None):
+    arm_w = ARM_W if arm_w is None else arm_w
+    half = (arm_w + ARM_CLEAR) / 2 + WALL
     base = box(BLOCK_X0, BLOCK_X1, -half, half, -BASE_T, 0)
     walls = union([
         box(BLOCK_X0, BLOCK_X1, -half, -half + WALL, 0, WALL_H),
@@ -111,8 +117,8 @@ def make_block():
         y0 = EAR_GAP / 2 if s > 0 else -EAR_GAP / 2 - EAR_T
         y1 = y0 + EAR_T
         ear = union([
-            box(-5.5, 5.5, y0, y1, -PIVOT_DEPTH, -BASE_T + 0.01),
-            cyl_y(5.5, y0, y1, 0, -PIVOT_DEPTH),
+            box(-EAR_R, EAR_R, y0, y1, -PIVOT_DEPTH, -BASE_T + 0.01),
+            cyl_y(EAR_R, y0, y1, 0, -PIVOT_DEPTH),
         ])
         ear_parts.append(ear)
     ears = union(ear_parts)
@@ -181,10 +187,10 @@ def place_leg(leg, theta_deg):
 def make_foot():
     px, pz = HUB_W + 0.3, LEG_T + 0.3
     outer = M.batch_hull([
-        box(-5.5, 5.5, -4, 4, 4, 10),
-        M.sphere(4.5, SEG).translate([0, 0, 3.5]),
+        box(-px / 2 - 2.2, px / 2 + 2.2, -pz / 2 - 2.2, pz / 2 + 2.2, 4, 12),
+        M.sphere(pz / 2 + 2.2, SEG).translate([0, 0, pz / 2 + 1.5]),
     ])
-    pocket = box(-px / 2, px / 2, -pz / 2, pz / 2, 4, 11)
+    pocket = box(-px / 2, px / 2, -pz / 2, pz / 2, 4, 13)
     return outer - pocket
 
 
@@ -256,15 +262,17 @@ def on_bed(man):
 
 
 def export(out_dir):
-    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(os.path.join(out_dir, "blocks"), exist_ok=True)
     parts = {
         # ориентация под печать
-        "kolibri_block_x4.stl": on_bed(make_block().rotate([90, 0, 0])),   # на боку: ось шарнира вертикально
         "kolibri_leg_x4.stl": on_bed(make_leg().rotate([90, 0, 0])),       # плашмя: слои вдоль ножки
         "kolibri_foot_TPU_x4.stl": on_bed(make_foot().rotate([180, 0, 0])),  # открытым карманом на стол
         "kolibri_spool_x1.stl": on_bed(make_spool()),
         "kolibri_servo_mount_x1.stl": on_bed(make_servo_mount().rotate([180, 0, 0])),
     }
+    # колодки под разные ширины луча: на боку, ось шарнира вертикально
+    for w in ARM_W_VARIANTS:
+        parts[f"blocks/kolibri_block_arm{w}mm_x4.stl"] = on_bed(make_block(w).rotate([90, 0, 0]))
     # сборки одного луча для просмотра (не для печати)
     block, leg = make_block(), make_leg()
     foot = make_foot().rotate([0, 90, 0]).translate([LEG_LEN - 4, 0, 0])
@@ -275,7 +283,7 @@ def export(out_dir):
         tm = to_trimesh(man)
         tm.export(os.path.join(out_dir, name))
         ext = tm.extents
-        print(f"{name:32s} {ext[0]:6.1f} x {ext[1]:6.1f} x {ext[2]:6.1f} мм  "
+        print(f"{name:42s} {ext[0]:6.1f} x {ext[1]:6.1f} x {ext[2]:6.1f} мм  "
               f"watertight={tm.is_watertight}")
 
 

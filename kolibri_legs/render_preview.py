@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ITEMS = [
     ("preview_arm_folded.stl", "Луч: сложено", (15, -60)),
     ("preview_arm_deployed.stl", "Луч: раскрыто, упор 95°", (10, -60)),
-    ("kolibri_block_x4.stl", "Колодка ×4", (30, -50)),
+    ("blocks/kolibri_block_arm16mm_x4.stl", "Колодка (луч 16 мм) ×4", (30, -50)),
     ("kolibri_leg_x4.stl", "Ножка ×4", (60, -80)),
     ("kolibri_spool_x1.stl", "Катушка ×1", (35, -40)),
     ("kolibri_servo_mount_x1.stl", "Крепление серво ×1", (35, -40)),
