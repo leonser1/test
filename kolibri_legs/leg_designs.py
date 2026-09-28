@@ -79,11 +79,12 @@ def skid():
 
 
 def talon():
-    """3. Коготь — изогнутая лапка колибри, палец вперёд, шпора назад."""
-    main = chain(bezier((0, -8, 6.5), (-2, -34, 5.5), (18, -LEG_H + 4.2, 4.2), 14))
+    """3. Коготь — изогнутая лапка колибри, палец вперёд (к мотору), шпора назад.
+    Изгиб подобран так, чтобы нависания были не круче ~50° — печать без поддержек."""
+    main = chain(bezier((0, -8, 6.5), (0, -24, 5.5), (18, -LEG_H + 4.2, 4.2), 14))
     base = M.batch_hull([box(-12, 12, -6, 6, -4.5, -3.5), sph(0, -8, 6.8)])
-    spur = chain(bezier((3, -LEG_H + 9, 4.2), (-4, -LEG_H + 5, 3.8), (-12, -LEG_H + 3.4, 3.4), 6))
-    toe = sph(22, -LEG_H + 3.6, 3.6)
+    spur = chain(bezier((2, -LEG_H + 13, 4.0), (-3, -LEG_H + 8, 3.8), (-9, -LEG_H + 3.4, 3.4), 6))
+    toe = sph(21, -LEG_H + 3.6, 3.6)
     return finish(union([base, main, spur, toe]))
 
 
@@ -144,5 +145,74 @@ def main():
               f"пересечение с лучом {clash:.2f}  низ {z0:.1f}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and "--kit" not in __import__("sys").argv:
     main()
+
+
+# ------------------------------------------------------------------ центральная лапа
+CENTER_HOLES = (52.6, 37.0)   # болты M3 в нижней плите рамы (замер)
+PLATE_BELOW_ARM = 3.0         # нижняя плита рамы ниже низа лучей
+CENTER_GAP = 4.0              # центральная лапа короче боковых: страхует брюхо, дрон стоит на 4 ножках
+CENTER_H = LEG_H - PLATE_BELOW_ARM - CENTER_GAP   # от низа плиты рамы до низа лапы
+
+
+def talon_center():
+    """Центральная лапа: пластина на 4 болта + 4 пальца как у птичьей лапы.
+    Z=0 — низ нижней плиты рамы. Пальцы по осям X/Y, болты по диагоналям."""
+    hx, hy = CENTER_HOLES[0] / 2, CENTER_HOLES[1] / 2
+    plate_t = 3.0
+    plate = M.batch_hull([M.cylinder(plate_t, 5.0, 5.0, SEG).translate([sx * hx, sy * hy, -plate_t])
+                          for sx in (-1, 1) for sy in (-1, 1)])
+    stem = chain([(0, -plate_t + 1, 9.0), (0, -12, 7.0)])
+    toes = []
+    for a, reach in ((0, 26), (90, 22), (180, 26), (270, 22)):
+        toe = union([
+            chain(bezier((0, -11, 6.0), (reach * 0.45, -23, 5.0), (reach, -CENTER_H + 3.6, 3.6), 12)),
+            sph(reach + 2.5, -CENTER_H + 3.0, 3.0),
+        ])
+        toes.append(toe.rotate([0, 0, a]))
+    body = union([plate, stem] + toes) ^ box(-80, 80, -80, 80, -CENTER_H - 30, 0)   # ничего выше плиты рамы
+    cuts = [box(-80, 80, -80, 80, -CENTER_H - 30, -CENTER_H)]
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cuts.append(M.cylinder(plate_t + 2, 1.65, 1.65, 32).translate([sx * hx, sy * hy, -plate_t - 1]))
+    # облегчение пластины: 2 окна между болтами
+    for sx in (-1, 1):
+        cuts.append(M.batch_hull([M.cylinder(plate_t + 2, 4.5, 4.5, SEG).translate([sx * 13, sy * 8, -plate_t - 1])
+                                  for sy in (-1, 1)]))
+    return body - union(cuts)
+
+
+def export_kit():
+    """Финальный комплект: Коготь ×4 + центральная лапа ×1."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    out = os.path.join(base, "stl", "kit_talon")
+    os.makedirs(out, exist_ok=True)
+    leg, center = talon(), talon_center()
+    parts = {
+        "kolibri_talon_arm_TPU_x4.stl": print_pose(leg, "saddle"),
+        "kolibri_talon_center_TPU_x1.stl": print_pose(center.rotate([180, 0, 0]), "skid"),   # пластиной на стол
+    }
+    for name, man in parts.items():
+        tm = to_trimesh(man)
+        tm.export(os.path.join(out, name))
+        e = tm.extents
+        print(f"{name:34s} {e[0]:5.1f}×{e[1]:5.1f}×{e[2]:5.1f} мм  замкнута={tm.is_watertight}  "
+              f"~{tm.volume / 1000 * 1.21 * 0.42:.1f} г")
+    to_trimesh(center).export(os.path.join(out, "view_center.stl"))
+    to_trimesh(leg).export(os.path.join(out, "view_arm.stl"))
+
+
+def overhang_report(pts, name):
+    worst = 0
+    for (x1, z1, _), (x2, z2, _) in zip(pts, pts[1:]):
+        ang = math.degrees(math.atan2(abs(x2 - x1), abs(z2 - z1) + 1e-9))
+        worst = max(worst, ang)
+    print(f"{name}: самый крутой участок {worst:.0f}° от вертикали")
+
+
+if __name__ == "__main__" and "--kit" in __import__("sys").argv:
+    export_kit()
+    overhang_report(bezier((0, -8, 6.5), (0, -24, 5.5), (18, -LEG_H + 4.2, 4.2), 14), "коготь, палец")
+    overhang_report(bezier((2, -LEG_H + 13, 4.0), (-3, -LEG_H + 8, 3.8), (-9, -LEG_H + 3.4, 3.4), 6), "коготь, шпора")
+    overhang_report(bezier((0, -11, 6.0), (26 * 0.45, -23, 5.0), (26, -CENTER_H + 3.6, 3.6), 12), "центр, длинный палец")
