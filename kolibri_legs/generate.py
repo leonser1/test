@@ -27,8 +27,9 @@ SEG = 64
 # Рама: колёсная база 427 мм (центр–мотор 213.5), луч 7.5 мм, стек 30.5×30.5.
 # Колодка ставится на ~120 мм от центра рамы: сложенная ножка с пяткой
 # заканчивается на ~197 мм и не доходит до винтов мотора (213.5).
-ARM_W = 16.0          # ширина луча в месте установки колодки (ЗАМЕРЬТЕ!)
-ARM_W_VARIANTS = (14, 15, 16, 17, 18, 19, 20, 22)   # колодки под разные ширины
+ARM_W = 11.22         # ширина луча в месте установки колодки (замер)
+ARM_W_VARIANTS = ()   # доп. колодки под другие ширины, напр. (14, 16, 18)
+MIN_HALF = 9.0        # мин. полуширина колодки: штыри резинки не задевают ножку
 ARM_T = 7.5           # толщина луча
 ARM_CLEAR = 0.4       # зазор посадки колодки на луч
 WALL = 2.4            # толщина боковых щёк колодки
@@ -104,11 +105,12 @@ def radial_bar(angle_deg, r0, r1, width, thick):
 # ---------------------------------------------------------------- колодка
 def make_block(arm_w=None):
     arm_w = ARM_W if arm_w is None else arm_w
-    half = (arm_w + ARM_CLEAR) / 2 + WALL
+    half = max((arm_w + ARM_CLEAR) / 2 + WALL, MIN_HALF)
+    wall = half - (arm_w + ARM_CLEAR) / 2
     base = box(BLOCK_X0, BLOCK_X1, -half, half, -BASE_T, 0)
     walls = union([
-        box(BLOCK_X0, BLOCK_X1, -half, -half + WALL, 0, WALL_H),
-        box(BLOCK_X0, BLOCK_X1, half - WALL, half, 0, WALL_H),
+        box(BLOCK_X0, BLOCK_X1, -half, -half + wall, 0, WALL_H),
+        box(BLOCK_X0, BLOCK_X1, half - wall, half, 0, WALL_H),
     ])
 
     # уши шарнира
@@ -262,7 +264,7 @@ def on_bed(man):
 
 
 def export(out_dir):
-    os.makedirs(os.path.join(out_dir, "blocks"), exist_ok=True)
+    os.makedirs(os.path.join(out_dir, "blocks") if ARM_W_VARIANTS else out_dir, exist_ok=True)
     parts = {
         # ориентация под печать
         "kolibri_leg_x4.stl": on_bed(make_leg().rotate([90, 0, 0])),       # плашмя: слои вдоль ножки
@@ -270,7 +272,8 @@ def export(out_dir):
         "kolibri_spool_x1.stl": on_bed(make_spool()),
         "kolibri_servo_mount_x1.stl": on_bed(make_servo_mount().rotate([180, 0, 0])),
     }
-    # колодки под разные ширины луча: на боку, ось шарнира вертикально
+    parts["kolibri_block_x4.stl"] = on_bed(make_block().rotate([90, 0, 0]))
+    # колодки под другие ширины луча: на боку, ось шарнира вертикально
     for w in ARM_W_VARIANTS:
         parts[f"blocks/kolibri_block_arm{w}mm_x4.stl"] = on_bed(make_block(w).rotate([90, 0, 0]))
     # сборки одного луча для просмотра (не для печати)
