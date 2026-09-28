@@ -46,12 +46,12 @@ EAR_GAP = HUB_W + 0.6
 EAR_R = 6.5           # радиус ушей вокруг оси
 
 LEG_LEN = 68.0        # длина стержня ножки от оси до конца (без пятки)
-LEG_T = 5.5           # толщина стержня ножки
+LEG_T = 7.0           # толщина стержня ножки
 LEVER_LEN = 12.0      # рычажок под нить
 LEVER_ANGLE = -60.0   # направление рычажка относительно ножки (в плоскости XZ)
 THREAD_HOLE = 1.8
 TOOTH_R = 6.8         # зуб-упор на ступице (упирается в основание на 95°)
-TOOTH_ANGLE = -116.5  # подобран проверкой --check, чтобы упор был на ~95°
+TOOTH_ANGLE = -111.5  # подобран проверкой --check, чтобы упор был на ~95°
 BAND_AT = 24.0        # проточка под резинку на ножке
 
 EYE_X = -24.0         # ушко-направляющая нити
@@ -64,7 +64,7 @@ SPOOL_R = 8.0         # радиус барабана: ~15 мм нити за ~1
 SPOOL_FLANGE_R = 12.0
 
 SERVO_L, SERVO_W = 23.2, 12.9     # карман под SG90 / MG90S (с зазором)
-SERVO_TAB_H = 16.5                # от дна корпуса до ушек серво
+SERVO_TAB_H = 20.0                # глубина гнезда: от ушек серво вверх (SG90 ~16, MG90S ~18.5 — с запасом)
 SERVO_SCREW_SPACING = 27.8
 STACK = 30.5                      # крепёж к раме по шаблону стека (30.5 или 20)
 # --------------------------------------------------------------------------
@@ -161,11 +161,11 @@ def make_leg():
     hub = cyl_y(HUB_R, -HUB_W / 2, HUB_W / 2, 0, 0)
     bar = box(0, LEG_LEN, -HUB_W / 2, HUB_W / 2, -LEG_T / 2, LEG_T / 2)
     lever = union([
-        radial_bar(LEVER_ANGLE, 0, LEVER_LEN, HUB_W, 4.0),
-        cyl_y(2.0, -HUB_W / 2, HUB_W / 2,
+        radial_bar(LEVER_ANGLE, 0, LEVER_LEN, HUB_W, 5.0),
+        cyl_y(2.5, -HUB_W / 2, HUB_W / 2,
               LEVER_LEN * math.cos(math.radians(LEVER_ANGLE)), LEVER_LEN * math.sin(math.radians(LEVER_ANGLE))),
     ])
-    tooth = radial_bar(TOOTH_ANGLE, 0, TOOTH_R, HUB_W, 3.5)
+    tooth = radial_bar(TOOTH_ANGLE, 0, TOOTH_R, HUB_W, 4.5)
     body = union([hub, bar, lever, tooth])
 
     lx = (LEVER_LEN - 1.5) * math.cos(math.radians(LEVER_ANGLE))
@@ -252,15 +252,22 @@ def make_servo_mount():
     plate = box(-half, half, -half, half, -plate_t, 0)
     ox, oy = SERVO_L / 2 + 2, SERVO_W / 2 + 2
     sleeve = box(-ox, ox, -oy, oy, -SERVO_TAB_H, 0)
-    wings = box(-(SERVO_SCREW_SPACING / 2 + 3), SERVO_SCREW_SPACING / 2 + 3, -oy, oy, -SERVO_TAB_H, -SERVO_TAB_H + 7)
+    wx = SERVO_SCREW_SPACING / 2 + 3
+    # «уши» под винты серво со скосом 45° к пластине — печатаются без поддержек
+    wings = M.batch_hull([
+        box(-wx, wx, -oy, oy, -SERVO_TAB_H, -SERVO_TAB_H + 7),
+        box(-ox, ox, -oy, oy, -SERVO_TAB_H + 7 + (wx - ox), -SERVO_TAB_H + 7 + (wx - ox) + 0.1),
+    ])
     body = union([plate, sleeve, wings])
     cuts = [box(-SERVO_L / 2, SERVO_L / 2, -SERVO_W / 2, SERVO_W / 2, -SERVO_TAB_H - 1, 1)]
     for sx in (-1, 1):
         cuts.append(cyl_z(0.8, -SERVO_TAB_H - 1, -SERVO_TAB_H + 6, sx * SERVO_SCREW_SPACING / 2, 0, 16))
         for sy in (-1, 1):
             cuts.append(cyl_z(1.65, -plate_t - 1, 1, sx * STACK / 2, sy * STACK / 2, 32))
-    # вырез под провод серво
-    cuts.append(box(SERVO_L / 2 - 1, ox + 1, -3, 3, -6, 1))
+    # вырезы под провод серво с обоих торцов (у разных серво провод выходит по-разному)
+    for sx in (-1, 1):
+        cuts.append(box(sx * (SERVO_L / 2 - 1) - (0 if sx > 0 else ox - SERVO_L / 2 + 2),
+                        sx * (SERVO_L / 2 - 1) + (ox - SERVO_L / 2 + 2 if sx > 0 else 0), -3, 3, -8, 1))
     return body - union(cuts)
 
 
@@ -292,7 +299,7 @@ def export(out_dir):
         parts[f"blocks/kolibri_block_arm{w}mm_x4.stl"] = on_bed(make_block(w).rotate([90, 0, 0]))
     # сборки одного луча для просмотра (не для печати)
     block, leg = make_block(), make_leg()
-    foot = make_foot().rotate([0, 90, 0]).translate([LEG_LEN - 4, 0, 0])
+    foot = make_foot().rotate([0, 0, 90]).rotate([0, -90, 0]).translate([LEG_LEN + 4, 0, 0])  # карманом на конец ножки
     leg_with_foot = union([leg, foot])
     parts["preview_arm_folded.stl"] = union([block, place_leg(leg_with_foot, 0)])
     parts["preview_arm_deployed.stl"] = union([block, place_leg(leg_with_foot, 95)])
@@ -324,7 +331,7 @@ def check():
     eye = np.array([EYE_X, EYE_Z])
     l0 = np.linalg.norm(pt(0, LEVER_ANGLE, LEVER_LEN - 1.5) - eye)
     l1 = np.linalg.norm(pt(95, LEVER_ANGLE, LEVER_LEN - 1.5) - eye)
-    tip = pt(95, 0, LEG_LEN + 6)
+    tip = pt(95, 0, LEG_LEN + 5)
     print(f"ход нити {l0 - l1:.1f} мм -> поворот катушки {math.degrees((l0 - l1) / SPOOL_R):.0f}°")
     print(f"кончик пятки на 95°: x={tip[0]:.1f}, z={tip[1]:.1f} мм от низа луча")
 
