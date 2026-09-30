@@ -11,10 +11,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ITEMS = [
     ("preview_with_drone.stl", "Модуль под Mark4 10\" (винты — диски)", (22, -60)),
     ("preview_assembly.stl", "Сборка: колёса прямо", (25, -130)),
-    ("preview_assembly_steer30.stl", "Поворот 30°, вид сверху", (89, -90)),
-    ("car_deck_x1.stl", "Палуба ×1 (PETG/PA-CF)", (35, -130)),
-    ("car_knuckle_L_x1.stl", "Кулак Л ×1 (как печатать)", (30, -60)),
-    ("car_rim_rear_motor_x2.stl", "Обод-стакан на мотор ×2", (50, -60)),
+    ("preview_steering_detail.stl", "Руль: серво → паз → поперечная тяга → кулаки", (40, -145)),
+    ("preview_assembly_left.stl", "Серво +30°: поворот влево (сверху)", (89, -90)),
+    ("preview_assembly_right.stl", "Серво −30°: поворот вправо (сверху)", (89, -90)),
+    ("car_deck_x1.stl", "Палуба: стек, серво, стойки, моторы", (35, -130)),
 ]
 fig = plt.figure(figsize=(15, 9.5))
 for i, (fn, title, (el, az)) in enumerate(ITEMS):

@@ -41,7 +41,7 @@ REAR_X, FRONT_X = -50.0, 50.0   # колёсная база 100: всё вне �
 # колесо (стакан): наружный торец ступицы на Y = WHEEL_OUT_Y
 WHEEL_OUT_Y = 60.0
 WHEEL_W = 20.0                  # ширина обода
-TIRE_R, TIRE_IN_R, TIRE_W = 35.0, 24.8, 16.6
+TIRE_R, TIRE_IN_R, TIRE_W = 35.0, 24.8, 14.6   # ровная полка обода 15 мм (1.5..16.5)
 RIM_R, RIM_IN_R, FLANGE_R = 25.0, 21.5, 27.0
 HUB_T = 6.0                     # толщина диска ступицы
 BELL_BOSS_R, BELL_BOSS_T = 6.0, 1.5   # выемка под бортик вала на колоколе
@@ -62,7 +62,7 @@ SLEEVE_Z0, SLEEVE_Z1 = 0.5, 27.5
 ARM_L = 15.0                    # рычаг рулевой тяги
 ARM_Z0, ARM_Z1 = 23.5, 27.5
 ARM_HOLE_D = 2.2                # M2 болт + гайка (или шаровой наконечник M2)
-AXLE_BOSS_HALF = 7.0            # полудиагональ ромба оси
+AXLE_BOSS_HALF = 7.5           # полудиагональ ромба оси: вершина = верх гильзы (стол при печати)
 BEARING_D, BEARING_W = 16.1, 5.0   # 625ZZ (5×16×5), 2 шт на колесо
 STEER_MAX = 30.0                # требуемый угол поворота колёс
 
@@ -71,7 +71,11 @@ SERVO_L, SERVO_W = 23.2, 12.9
 SERVO_SHAFT_OFF = 5.5
 SERVO_SCREW_SPACING = 27.8
 SERVO_TAB_Z = 15.5              # верх опор под ушки (сервопривод стоит на палубе)
-HORN_L = 13.0                   # рабочее отверстие качалки от вала
+HORN_L = 13.0                   # рабочее отверстие качалки от вала (паз тяги берёт 11–14)
+HORN_Z = 28.0                   # верх качалки над палубой
+SERVO_TRAVEL = 30.0             # ход качалки ± (конечные точки серво): колёса ≈ 30°/25°
+BAR_Z0 = 30.0                   # низ поперечной тяги (над гайкой пальца на качалке)
+BAR_T = 3.0
 
 # стек второго полётника
 STACK_30 = 30.5
@@ -84,7 +88,9 @@ _n = math.hypot(_dx, _dy)
 ARM_DIR = (_dx / _n, _dy / _n)
 ARM_END = (FRONT_X + ARM_L * ARM_DIR[0], KP_Y + ARM_L * ARM_DIR[1])
 SERVO_SHAFT_X = ARM_END[0] + HORN_L
-TIE_ROD_L = round(ARM_END[1], 1)          # тяга вдоль Y от качалки к рычагу
+BAR_L = 2 * ARM_END[1]                    # поперечная тяга: между отверстиями рычагов
+PIN_X0 = SERVO_SHAFT_X - HORN_L            # палец качалки при прямых колёсах
+SLOT_X = (SERVO_SHAFT_X - 15.0 - 0.5, SERVO_SHAFT_X - 11.0 + 13.0 * (1 - math.cos(math.radians(45))) + 0.5)
 WHEEL_IN_Y = WHEEL_OUT_Y - WHEEL_W
 
 
@@ -317,10 +323,85 @@ def place_wheel(man, x, side=1):
     return m if side > 0 else mirror_y(m)
 
 
-def make_tie_rod(length):
-    rod = M.batch_hull([cyl_z(3.5, 0, 3), cyl_z(3.5, 0, 3, length, 0)])
-    rod = rod - union([cyl_z(ARM_HOLE_D / 2, -1, 4, 0, 0, 16), cyl_z(ARM_HOLE_D / 2, -1, 4, length, 0, 16)])
-    return rod
+def make_tie_bar():
+    """Поперечная рулевая тяга (в координатах машины, колёса прямо).
+    Концы — на рычаги кулаков (M2 + гайка). В середине паз вдоль X: в него входит
+    палец качалки серво (винт M2). Паз сам выбирает смещение пальца по X при
+    повороте качалки и разную длину качалки (11–14 мм)."""
+    ex, ey = ARM_END
+    z0, z1 = BAR_Z0, BAR_Z0 + BAR_T
+    beam = M.batch_hull([cyl_z(3.8, z0, z1, ex, ey), cyl_z(3.8, z0, z1, ex, -ey)])
+    pad = M.batch_hull([cyl_z(3.6, z0, z1, SLOT_X[0], 0), cyl_z(3.6, z0, z1, SLOT_X[1], 0)])
+    # бобышки-проставки вниз до рычагов
+    bosses = [cyl_z(3.8, ARM_Z1 + 0.3, z0 + 0.01, ex, sy * ey) for sy in (-1, 1)]
+    bar = union([beam, pad] + bosses)
+    cuts = [cyl_z(ARM_HOLE_D / 2, ARM_Z1 - 1, z1 + 1, ex, sy * ey, 16) for sy in (-1, 1)]
+    cuts.append(M.batch_hull([cyl_z(1.2, z0 - 1, z1 + 1, SLOT_X[0], 0, 16),
+                              cyl_z(1.2, z0 - 1, z1 + 1, SLOT_X[1], 0, 16)]))
+    return bar - union(cuts)
+
+
+# ---------------------------------------------------------------- кинематика руля
+def _rot(v, deg):
+    a = math.radians(deg)
+    return (v[0] * math.cos(a) - v[1] * math.sin(a), v[0] * math.sin(a) + v[1] * math.cos(a))
+
+
+def _arm_end(side, delta):
+    kx, ky = FRONT_X, side * KP_Y
+    a = (ARM_END[0] - FRONT_X, side * (ARM_END[1] - KP_Y))
+    r = _rot(a, delta)
+    return (kx + r[0], ky + r[1])
+
+
+def _bisect(f, lo, hi, n=60):
+    flo = f(lo)
+    for _ in range(n):
+        mid = (lo + hi) / 2
+        fm = f(mid)
+        if (fm > 0) == (flo > 0):
+            lo, flo = mid, fm
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def steer_state(delta_l):
+    """По углу левого колеса (+ влево) -> угол правого, угол качалки, положение пальца в пазу."""
+    el = _arm_end(1, delta_l)
+    dr = _bisect(lambda d: math.dist(el, _arm_end(-1, d)) - BAR_L, delta_l - 25, delta_l + 25)
+    er = _arm_end(-1, dr)
+    mid = ((el[0] + er[0]) / 2, (el[1] + er[1]) / 2)
+    u = ((el[0] - er[0]) / BAR_L, (el[1] - er[1]) / BAR_L)
+    n = (u[1], -u[0])             # поперёк тяги, вперёд
+    bar_ang = math.degrees(math.atan2(u[1], u[0])) - 90.0
+
+    def pin(phi):
+        v = _rot((-HORN_L, 0.0), phi)
+        return (SERVO_SHAFT_X + v[0], v[1])
+
+    def f(phi):
+        t = pin(phi)
+        return (t[0] - mid[0]) * u[0] + (t[1] - mid[1]) * u[1]
+    phi = _bisect(f, -80, 80)
+    t = pin(phi)
+    slot_pos = PIN_X0 + (t[0] - mid[0]) * n[0] + (t[1] - mid[1]) * n[1]
+    return dict(dl=delta_l, dr=dr, phi=phi, slot=slot_pos, mid=mid, bar_ang=bar_ang, el=el, er=er)
+
+
+def delta_for_servo(phi_target):
+    return _bisect(lambda d: steer_state(d)["phi"] - phi_target, -45, 45)
+
+
+def place_bar(bar, st):
+    m0 = (ARM_END[0], 0.0)
+    return (bar.translate([-m0[0], 0, 0]).rotate([0, 0, st["bar_ang"]])
+            .translate([st["mid"][0], st["mid"][1], 0]))
+
+
+def place_knuckle_state(man, delta, side):
+    """Кулак стороны side, повернутый на delta (+ = колесо влево)."""
+    return place_knuckle(man, delta if side > 0 else -delta, side)
 
 
 # ---------------------------------------------------------------- макеты для просмотра
@@ -331,12 +412,23 @@ def motor_proxy(side=1):
     return m if side > 0 else mirror_y(m)
 
 
-def servo_proxy():
+def servo_body_proxy():
     cx = SERVO_SHAFT_X + SERVO_SHAFT_OFF
     body = box(cx - 11.4, cx + 11.4, -6.1, 6.1, 0, 22.5)
     tabs = box(cx - 16.2, cx + 16.2, -6.1, 6.1, SERVO_TAB_Z + 0.3, SERVO_TAB_Z + 2.8)
-    horn = M.batch_hull([cyl_z(3.5, 26, 28, SERVO_SHAFT_X, 0), cyl_z(2.2, 26, 28, ARM_END[0], 0)])
-    return union([body, tabs, horn, cyl_z(2.4, 22.5, 26, SERVO_SHAFT_X, 0)])
+    return union([body, tabs, cyl_z(2.4, 22.5, HORN_Z - 2, SERVO_SHAFT_X, 0)])
+
+
+def horn_proxy(phi=0.0):
+    h = union([M.batch_hull([cyl_z(3.5, HORN_Z - 2, HORN_Z, SERVO_SHAFT_X, 0),
+                             cyl_z(2.2, HORN_Z - 2, HORN_Z, PIN_X0, 0)]),
+               cyl_z(1.0, HORN_Z, BAR_Z0 + BAR_T + 1, PIN_X0, 0, 16),       # палец M2
+               hex_prism(4.0, HORN_Z, HORN_Z + 1.6, PIN_X0, 0)])             # гайка пальца
+    return h.translate([-SERVO_SHAFT_X, 0, 0]).rotate([0, 0, phi]).translate([SERVO_SHAFT_X, 0, 0])
+
+
+def servo_proxy(phi=0.0):
+    return union([servo_body_proxy(), horn_proxy(phi)])
 
 
 def stack_proxy():
@@ -357,18 +449,19 @@ def drone_proxy():
     return union([plate] + arms)
 
 
-def assembly(steer=0.0, with_drone=False):
+def assembly(servo=0.0, with_drone=False):
+    """servo — угол качалки, колёса и тяга ставятся по кинематике."""
+    st = steer_state(delta_for_servo(servo)) if servo else steer_state(0.0)
     deck = make_deck()
     kn = make_knuckle()
     rim_f, rim_r, tire = make_rim(True), make_rim(False), make_tire()
     tire_placed = tire.translate([0, 0, 1.7])
     fw = union([rim_f, tire_placed])
     rw = union([rim_r, tire_placed])
-    parts = [deck, servo_proxy(), stack_proxy()]
+    parts = [deck, servo_proxy(st["phi"]), stack_proxy(), place_bar(make_tie_bar(), st)]
     for s in (-1, 1):
-        a = steer
         front = union([kn, place_wheel(fw, FRONT_X)])
-        parts.append(place_knuckle(front, a, s))
+        parts.append(place_knuckle_state(front, st["dl"] if s > 0 else st["dr"], s))
         parts.append(place_wheel(rw, REAR_X, s))
         parts.append(motor_proxy(s))
     if with_drone:
@@ -377,15 +470,52 @@ def assembly(steer=0.0, with_drone=False):
 
 
 # ---------------------------------------------------------------- проверки
+def steering_check(deck, kn, fw):
+    """Серво -> тяга -> оба кулака: углы, Аккерман, паз, касания на всём ходу."""
+    ok = True
+    bar = make_tie_bar()
+    env = union([deck, servo_body_proxy(), stack_proxy()])
+    front = union([kn, place_wheel(fw, FRONT_X)])
+    wb, tw = FRONT_X - REAR_X, 2 * KP_Y
+    print("  качалка  колесо Л  колесо П  идеал внутр.  палец в пазу X   касания")
+    for phi in (-SERVO_TRAVEL - 5, -SERVO_TRAVEL, -20, -10, 0, 10, 20, SERVO_TRAVEL, SERVO_TRAVEL + 5):
+        d = delta_for_servo(phi)
+        st = steer_state(d)
+        outer, inner = sorted((abs(st["dl"]), abs(st["dr"])))
+        ideal = math.degrees(math.atan(1 / (1 / math.tan(math.radians(outer)) - tw / wb))) if outer > 0.5 else 0
+        b = place_bar(bar, st)
+        k = union([place_knuckle_state(front, st["dl"], 1), place_knuckle_state(front, st["dr"], -1)])
+        hit = (b ^ env).volume() + (b ^ k).volume() * 0 + (k ^ env).volume() + (horn_proxy(st["phi"]) ^ b).volume()
+        in_slot = SLOT_X[0] + 1.2 <= st["slot"] <= SLOT_X[1] - 1.2
+        # тяга не должна касаться кулаков кроме своих бобышек: проверяем без рычагов
+        wheels_hit = (b ^ union([place_knuckle_state(place_wheel(fw, FRONT_X), st["dl"], 1),
+                                 place_knuckle_state(place_wheel(fw, FRONT_X), st["dr"], -1)])).volume()
+        bad = hit > 0.5 or wheels_hit > 0.5 or not in_slot
+        ok &= not bad
+        print(f"  {phi:+6.0f}°  {st['dl']:+7.1f}°  {st['dr']:+7.1f}°    {ideal:5.1f}°      "
+              f"{st['slot']:5.1f} [{SLOT_X[0] + 1.2:.1f}..{SLOT_X[1] - 1.2:.1f}]  "
+              f"{'ЕСТЬ' if bad else 'нет'}")
+    # запас от «мёртвой точки»: угол между рычагом и тягой
+    st = steer_state(delta_for_servo(SERVO_TRAVEL))
+    for side, e, dlt in ((1, st["el"], st["dl"]), (-1, st["er"], st["dr"])):
+        a = _rot((ARM_END[0] - FRONT_X, side * (ARM_END[1] - KP_Y)), dlt)
+        u = ((st["el"][0] - st["er"][0]) / BAR_L, (st["el"][1] - st["er"][1]) / BAR_L)
+        ang = math.degrees(math.acos(abs(a[0] * u[0] + a[1] * u[1]) / math.hypot(*a)))
+        print(f"  угол рычаг–тяга {'Л' if side > 0 else 'П'} на краю хода: {ang:.0f}° (мёртвая точка при 0°)")
+        ok &= ang > 25
+    return ok
+
+
 def check():
     ok = True
     deck = make_deck()
     kn = make_knuckle()
     fw = union([make_rim(True), make_tire().translate([0, 0, 1.7])])
     front = union([kn, place_wheel(fw, FRONT_X)])
-    fixed_env = union([servo_proxy(), stack_proxy()])
-    print(f"Рулевая трапеция: рычаг конец X={ARM_END[0]:.1f} Y={ARM_END[1]:.1f}, "
-          f"вал серво X={SERVO_SHAFT_X:.1f}, тяга ≈ {TIE_ROD_L} мм между отверстиями")
+    fixed_env = union([servo_body_proxy(), stack_proxy()])
+    print(f"Рулевая трапеция: рычаги до X={ARM_END[0]:.1f} Y=±{ARM_END[1]:.1f}, "
+          f"вал серво X={SERVO_SHAFT_X:.1f}, поперечная тяга {BAR_L:.1f} мм между отверстиями")
+    ok &= steering_check(deck, kn, fw)
     for name, d in (("", deck),):
         max_free = None
         for ang in np.arange(0, 45.1, 1.0):
@@ -460,12 +590,18 @@ def export(out_dir):
         "car_rim_rear_motor_x2.stl": on_bed(make_rim(False)),
         "car_tire_TPU_x4.stl": on_bed(make_tire()),
     }
-    for L in (TIE_ROD_L - 2, TIE_ROD_L, TIE_ROD_L + 2):
-        parts[f"tie_rods/car_tie_rod_{L:.1f}mm_x2.stl"] = on_bed(make_tie_rod(L))
+    # тяга вверх ногами: плоский верх на столе, бобышки растут вверх
+    parts["car_tie_bar_x1.stl"] = on_bed(make_tie_bar().rotate([180, 0, 0]))
     parts["preview_assembly.stl"] = assembly(0)
-    parts["preview_assembly_steer30.stl"] = assembly(30)
+    parts["preview_assembly_left.stl"] = assembly(SERVO_TRAVEL)
+    parts["preview_assembly_right.stl"] = assembly(-SERVO_TRAVEL)
     parts["preview_with_drone.stl"] = assembly(0, with_drone=True)
-    os.makedirs(os.path.join(out_dir, "tie_rods"), exist_ok=True)
+    # крупный план руля: перед палубы, серво, тяга, кулаки (без колёс), поворот влево
+    st = steer_state(delta_for_servo(20))
+    kn = make_knuckle()
+    parts["preview_steering_detail.stl"] = union(
+        [make_deck() ^ box(20, 80, -45, 45, -10, 50), servo_proxy(st["phi"]), place_bar(make_tie_bar(), st),
+         place_knuckle_state(kn, st["dl"], 1), place_knuckle_state(kn, st["dr"], -1)])
     for name, man in parts.items():
         tm = to_trimesh(man)
         path = os.path.join(out_dir, name)
