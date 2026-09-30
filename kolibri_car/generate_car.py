@@ -3,9 +3,10 @@
 
 Модуль крепится снизу к нижней плите дрона 4 болтами M3 (отверстия 52.6 × 37).
 На нём: второй полётник (стек 30.5×30.5 или 20×20), серво руля, два передних
-поворотных кулака с тягами, два задних мотора (такие же, как на дроне, 2806–2807,
-крепление 16×16 и 19×19). Задние колёса надеваются на вал мотора, как пропеллер.
-Колесо сделано стаканом: колокол мотора прячется внутрь колеса.
+поворотных кулака с поперечной тягой, два задних мотора (такие же, как на дроне,
+2806–2807, крепление 16×16 и 19×19). Каждый мотор крутит своё заднее колесо через
+редуктор 1:4: шестерня 12 зубьев на валу мотора (зажата гайкой пропеллера), венец
+48 зубьев на колесе. Колесо вращается на двух 625ZZ на неподвижной оси M5.
 
 Система координат: X вперёд, Y влево, Z вверх. Z=0 — верх палубы модуля.
 Нижняя плита дрона на Z = TOWER_H. Центр рамы над X=0, Y=0.
@@ -44,15 +45,25 @@ WHEEL_W = 20.0                  # ширина обода
 TIRE_R, TIRE_IN_R, TIRE_W = 35.0, 24.8, 14.6   # ровная полка обода 15 мм (1.5..16.5)
 RIM_R, RIM_IN_R, FLANGE_R = 25.0, 21.5, 27.0
 HUB_T = 6.0                     # толщина диска ступицы
-BELL_BOSS_R, BELL_BOSS_T = 6.0, 1.5   # выемка под бортик вала на колоколе
 
 # задний мотор 2806/2807
-MOTOR_WALL_Y = 18.0             # внутренняя сторона стенки мотора
-MOTOR_WALL_T = 4.0
 MOTOR_LEN = 32.0                # от лапы мотора до верха колокола (замерить свой!)
 MOTOR_BELL_R = 17.5
 MOTOR_CENTER_D = 12.0           # отверстие под стопорное кольцо вала
 MOTOR_HOLE_D = 3.3
+
+# редуктор задних колёс 1:4, модуль 1, угол зацепления 20°
+GEAR_M = 1.0
+PINION_Z, WHEEL_GEAR_Z = 12, 48
+PROFILE_SHIFT = 0.3             # +0.3 у шестерни (12 зубьев без подреза), −0.3 у венца
+BACKLASH = 0.15                 # утонение каждого зуба по делительной окружности
+CENTER_EXTRA = 0.1              # + к межосевому под печатные зубья
+PINION_W = 7.0                  # ширина шестерни (зажата между колоколом и гайкой)
+GEAR_W = 7.2                    # ширина венца
+PLATE_Y0, PLATE_Y1 = 2.0, 7.0   # съёмная плита мотора: внутренняя / наружная сторона
+PLATE_CB_D, PLATE_CB_H = 6.2, 1.5   # цековка под головки M3 изнутри
+STUB_R = 6.0                    # неподвижная ось колеса (бобышка вокруг M5)
+REAR_TUBE_R = 24.0              # ступица между венцом и ободом (гайка вала мотора снаружи)
 
 # передний поворотный кулак
 KP_Y = 30.0                     # шкворень (ось поворота)
@@ -93,6 +104,18 @@ PIN_X0 = SERVO_SHAFT_X - HORN_L            # палец качалки при п
 SLOT_X = (SERVO_SHAFT_X - 15.0 - 0.5, SERVO_SHAFT_X - 11.0 + 13.0 * (1 - math.cos(math.radians(45))) + 0.5)
 WHEEL_IN_Y = WHEEL_OUT_Y - WHEEL_W
 
+GEAR_RATIO = WHEEL_GEAR_Z / PINION_Z
+GEAR_A = GEAR_M * (PINION_Z + WHEEL_GEAR_Z) / 2 + CENTER_EXTRA
+MOTOR_X = REAR_X - GEAR_A                 # ось мотора позади оси колеса
+BELL_TOP_Y = PLATE_Y1 + MOTOR_LEN         # верх колокола = низ шестерни
+GEAR_Y0 = BELL_TOP_Y + 0.3
+GEAR_Y1 = GEAR_Y0 + GEAR_W
+NUT_Y1 = BELL_TOP_Y + PINION_W + 5.0      # конец гайки вала мотора
+REAR_WHEEL_IN_Y = NUT_Y1 + 1.5
+REAR_WHEEL_OUT_Y = REAR_WHEEL_IN_Y + WHEEL_W
+STUB_Y1 = GEAR_Y0 - 0.9                   # торец оси, шайба-упор до GEAR_Y0 - 0.1
+PLATE_X0, PLATE_X1 = MOTOR_X - 23, MOTOR_X + 23   # плита мотора с лапками
+
 
 def box(x0, x1, y0, y1, z0, z1):
     return M.cube([x1 - x0, y1 - y0, z1 - z0]).translate([x0, y0, z0])
@@ -116,6 +139,38 @@ def hex_prism(flats, z0, z1, x=0.0, y=0.0):
     return M.cylinder(z1 - z0, r, r, 6).translate([x, y, z0])
 
 
+def gear_profile(z, m=GEAR_M, shift=0.0, backlash=BACKLASH, pts=12):
+    """Эвольвентное зубчатое колесо (2D), зуб №0 смотрит по +X."""
+    pa = math.radians(20)
+    rp = m * z / 2
+    rb = rp * math.cos(pa)
+    ra = rp + m * (1 + shift)
+    rf = rp - m * (1.25 - shift)
+    s = m * (math.pi / 2 + 2 * shift * math.tan(pa)) - backlash
+
+    def inv(a):
+        return math.tan(a) - a
+    half = s / (2 * rp) + inv(pa)
+
+    def psi(r):
+        return half if r <= rb else half - inv(math.acos(rb / r))
+    r0 = max(rb, rf)
+    rs = [r0 + (ra - r0) * i / pts for i in range(pts + 1)]
+    poly = []
+    for i in range(z):
+        c = 2 * math.pi * i / z
+        prof = [(rf, c - psi(r0))] + [(r, c - psi(r)) for r in rs] + \
+               [(r, c + psi(r)) for r in reversed(rs)] + [(rf, c + psi(r0))]
+        poly += [(r * math.cos(a), r * math.sin(a)) for r, a in prof]
+    return m3d.CrossSection([poly])
+
+
+def make_pinion():
+    """Шестерня 12 зубьев на вал M5 мотора. Локально: z=0 — к колоколу."""
+    g = M.extrude(gear_profile(PINION_Z, shift=PROFILE_SHIFT), PINION_W)
+    return g - cyl_z(2.6, -1, PINION_W + 1, seg=32)
+
+
 def mirror_y(man):
     return man.mirror([0, 1, 0])
 
@@ -127,8 +182,7 @@ def tower_positions():
 # ---------------------------------------------------------------- палуба
 def make_deck():
     z0 = -DECK_T
-    wall_x0, wall_x1 = REAR_X - 21, REAR_X + 21
-    spine = box(wall_x0, FRONT_X - 6, -22, 22, z0, 0)
+    spine = box(PLATE_X0 - 1, FRONT_X - 6, -22, 22, z0, 0)
     body = [spine]
 
     # передняя поперечина со стойками шкворней
@@ -146,18 +200,15 @@ def make_deck():
         servo_posts.append(box(a, b, -5, 5, 0, SERVO_TAB_Z))
     body += servo_posts
 
-    # стенки задних моторов
+    # задний мост: поперечная стенка с неподвижными осями колёс (M5 внутри бобышек)
+    body.append(box(REAR_X - 3, REAR_X + 3, -STUB_Y1, STUB_Y1, z0, AXLE_Z))
+    body.append(cyl_y(STUB_R, -STUB_Y1, STUB_Y1, REAR_X, AXLE_Z))
     for s in (-1, 1):
-        y0, y1 = (MOTOR_WALL_Y, MOTOR_WALL_Y + MOTOR_WALL_T)
-        wall = box(wall_x0, wall_x1, y0, y1, 0, AXLE_Z + 18)
-        if s < 0:
-            wall = mirror_y(wall)
-        body.append(wall)
-        for gx in (wall_x0, wall_x1 - 3):
-            g = (M.hull_points([[gx, MOTOR_WALL_Y + 0.01, 0], [gx + 3, MOTOR_WALL_Y + 0.01, 0],
-                                [gx, 8, 0], [gx + 3, 8, 0],
-                                [gx, MOTOR_WALL_Y + 0.01, 30], [gx + 3, MOTOR_WALL_Y + 0.01, 30]]))
-            body.append(g if s > 0 else mirror_y(g))
+        tip = cyl_y(4.0, STUB_Y1 - 0.01, GEAR_Y0 - 0.1, REAR_X, AXLE_Z, 32)
+        g = M.hull_points([[REAR_X + 2.9, STUB_Y1 - 4, z0], [REAR_X + 2.9, STUB_Y1 - 1, z0],
+                           [REAR_X + 12, STUB_Y1 - 4, z0], [REAR_X + 12, STUB_Y1 - 1, z0],
+                           [REAR_X + 2.9, STUB_Y1 - 4, 15], [REAR_X + 2.9, STUB_Y1 - 1, 15]])
+        body += [tip, g] if s > 0 else [mirror_y(tip), mirror_y(g)]
 
     # стойки крепления к раме + перемычки
     tps = tower_positions()
@@ -182,13 +233,16 @@ def make_deck():
     deck = union(body)
 
     cuts = []
-    # отверстия моторов (16×16 квадрат и 19×19 ромбом)
+    # оси задних колёс: M5 (капля вверх — палуба печатается как лежит), гайка в пазу сверху
     for s in (-1, 1):
-        ya, yb = s * (MOTOR_WALL_Y - 8), s * (MOTOR_WALL_Y + MOTOR_WALL_T + 1)
-        y0, y1 = min(ya, yb), max(ya, yb)
-        cuts.append(cyl_y(MOTOR_CENTER_D / 2, y0, y1, REAR_X, AXLE_Z))
-        for dx, dz in [(8, 8), (8, -8), (-8, 8), (-8, -8)] + [(13.435, 0), (-13.435, 0), (0, 13.435), (0, -13.435)]:
-            cuts.append(cyl_y(MOTOR_HOLE_D / 2, y0, y1, REAR_X + dx, AXLE_Z + dz, 24))
+        ax = M.batch_hull([cyl_y(2.65, 12, GEAR_Y0 + 1, REAR_X, AXLE_Z, 32),
+                           box(REAR_X - 0.3, REAR_X + 0.3, 12, GEAR_Y0 + 1, AXLE_Z + 3.1, AXLE_Z + 3.7)])
+        slot = box(REAR_X - 4.15, REAR_X + 4.15, 25.0, 29.3, AXLE_Z - 4.8, AXLE_Z + STUB_R + 1)
+        cuts += [ax, slot] if s > 0 else [mirror_y(ax), mirror_y(slot)]
+    # лапки плит моторов: M3 вниз, гайки снизу палубы
+    for x, y in plate_foot_holes():
+        cuts.append(cyl_z(1.65, z0 - 1, 1, x, y, 24))
+        cuts.append(hex_prism(5.8, z0 - 1, z0 + 2.5, x, y))
     # шкворни M3 насквозь, гайка сверху; снизу утопленная головка
     for s in (-1, 1):
         cuts.append(cyl_z(1.65, z0 - 1, KP_TOP + 1, FRONT_X, s * KP_Y, 24))
@@ -213,8 +267,9 @@ def make_deck():
             x, y = sx * STACK_20 / 2, sy * STACK_20 / 2
             cuts.append(cyl_z(1.1, z0 - 1, 5, x, y, 16))
             cuts.append(hex_prism(4.1, z0 - 1, z0 + 2.0, x, y))
-    # окна под провода: между стенками моторов и под стеком
-    cuts.append(box(REAR_X - 13, REAR_X + 13, -11, 11, z0 - 1, 1))
+    # окна под провода: перед задним мостом, между плитами моторов и под стеком
+    cuts.append(box(REAR_X + 6, REAR_X + 18, -11, 11, z0 - 1, 1))
+    cuts.append(box(MOTOR_X - 12, MOTOR_X + 12, -1.5, 1.5, z0 - 1, 1))
     cuts.append(box(-6, 6, -6, 6, z0 - 1, 1))
     # прорези под хомуты (провода моторов, XT30)
     for x in (-20, 34):
@@ -240,6 +295,70 @@ def make_adapter_b():
         cuts.append(cyl_z(1.65, -1, t + 1, x, y, 24))
         cuts.append(hex_prism(5.8, -1, 2.6, x, y))          # гайка снизу
     return plate - union(cuts)
+
+
+def plate_foot_holes():
+    return [(x, s * 11.0) for x in (PLATE_X0 + 2, PLATE_X1 - 2) for s in (-1, 1)]
+
+
+def make_motor_plate():
+    """Съёмная плита левого мотора (Y>0). Мотор прикручивается на столе, потом плита
+    ставится на палубу 2 винтами M3 сквозь лапки. Головки винтов мотора утоплены
+    изнутри, поэтому две плиты встают спинами почти вплотную."""
+    x0, x1 = PLATE_X0, PLATE_X1
+    plate = box(x0, x1, PLATE_Y0, PLATE_Y1, 0, AXLE_Z + 19)
+    parts = [plate]
+    for fx0 in (x0, x1 - 4):
+        parts.append(box(fx0, fx0 + 4, PLATE_Y0, 15, 0, 4))
+        parts.append(M.hull_points([[fx0, PLATE_Y1 - 0.01, 3.9], [fx0 + 4, PLATE_Y1 - 0.01, 3.9],
+                                    [fx0, 15, 3.9], [fx0 + 4, 15, 3.9],
+                                    [fx0, PLATE_Y1 - 0.01, 32], [fx0 + 4, PLATE_Y1 - 0.01, 32]]))
+    part = union(parts)
+    cuts = [cyl_y(MOTOR_CENTER_D / 2, PLATE_Y0 - 1, PLATE_Y1 + 1, MOTOR_X, AXLE_Z)]
+    for dx, dz in [(8, 8), (8, -8), (-8, 8), (-8, -8), (13.435, 0), (-13.435, 0), (0, 13.435), (0, -13.435)]:
+        cuts.append(cyl_y(MOTOR_HOLE_D / 2, PLATE_Y0 - 1, PLATE_Y1 + 1, MOTOR_X + dx, AXLE_Z + dz, 24))
+        cuts.append(cyl_y(PLATE_CB_D / 2, PLATE_Y0 - 1, PLATE_Y0 + PLATE_CB_H, MOTOR_X + dx, AXLE_Z + dz, 32))
+    for x, y in plate_foot_holes():
+        if y > 0:
+            cuts.append(cyl_z(1.65, -1, 5, x, y, 24))
+    return part - union(cuts)
+
+
+def make_rear_wheel():
+    """Заднее колесо с венцом 48 зубьев. Локально: z=0 — наружный торец (на стол),
+    z растёт внутрь машины: обод 0..20, ступица-диск 20..TUBE, венец сверху."""
+    tz1 = REAR_WHEEL_OUT_Y - GEAR_Y1           # верх ступицы-трубы = низ венца
+    gz1 = REAR_WHEEL_OUT_Y - GEAR_Y0           # верх венца
+    rim = union([
+        cyl_z(RIM_R, 0, WHEEL_W),
+        cyl_z(FLANGE_R, 0, 1.5),
+        M.cylinder(2.0, RIM_R, FLANGE_R, SEG).translate([0, 0, WHEEL_W - 3.5]),
+        cyl_z(FLANGE_R, WHEEL_W - 1.5, WHEEL_W),
+    ]) - cyl_z(RIM_IN_R, -1, WHEEL_W - 5)
+    hub = cyl_z(11, 0, WHEEL_W)
+    spokes = [box(10, RIM_IN_R + 0.5, -1.5, 1.5, 0, WHEEL_W - 4.99).rotate([0, 0, 30 + 60 * i]) for i in range(6)]
+    tube = cyl_z(REAR_TUBE_R, WHEEL_W - 0.01, tz1 + 0.01)
+    gear = M.extrude(gear_profile(WHEEL_GEAR_Z, shift=-PROFILE_SHIFT), gz1 - tz1).translate([0, 0, tz1])
+    w = union([rim, hub, tube, gear] + spokes)
+    cuts = [cyl_z(BEARING_D / 2, -1, BEARING_W),                 # наружный подшипник
+            cyl_z(BEARING_D / 2, gz1 - BEARING_W, gz1 + 1),      # внутренний, в венце
+            cyl_z(3.2, -1, gz1 + 1, seg=32)]
+    for i in range(6):
+        a = math.radians(60 * i)
+        cuts.append(cyl_z(3.5, WHEEL_W - 6, gz1 + 1, 16 * math.cos(a), 16 * math.sin(a), 32))
+    return w - union(cuts)
+
+
+def place_pinion(pin, side=1):
+    m = pin.rotate([-90, 0, 0]).translate([MOTOR_X, BELL_TOP_Y, AXLE_Z])
+    return m if side > 0 else mirror_y(m)
+
+
+def place_rear_wheel(w, side=1, spin=0.0):
+    # венец повёрнут на полшага, чтобы зуб шестерни попал во впадину
+    m = (w.rotate([0, 0, 180.0 / WHEEL_GEAR_Z + spin]).rotate([90, 0, 0])
+         .translate([REAR_X, REAR_WHEEL_OUT_Y, AXLE_Z]))
+    return m if side > 0 else mirror_y(m)
 
 
 # ---------------------------------------------------------------- кулак
@@ -279,8 +398,8 @@ def place_knuckle(man, angle, side=1):
 
 
 # ---------------------------------------------------------------- колёса
-def make_rim(front):
-    """Обод-стакан. Локально: ось Z, z=0 — наружный торец (на стол), z растёт внутрь машины."""
+def make_rim(front=True):
+    """Передний обод-стакан на 2 × 625ZZ. Локально: ось Z, z=0 — наружный торец (на стол), z растёт внутрь машины."""
     rim = union([
         cyl_z(RIM_R, 0, WHEEL_W),
         cyl_z(FLANGE_R, 0, 1.5),
@@ -288,15 +407,10 @@ def make_rim(front):
         cyl_z(FLANGE_R, WHEEL_W - 1.5, WHEEL_W),
     ])
     rim = rim - cyl_z(RIM_IN_R, HUB_T, WHEEL_W + 1)
-    cuts = []
-    if front:
-        rim = union([rim, cyl_z(BEARING_D / 2 + 3, 0, 2 * BEARING_W + 0.8)])
-        cuts += [cyl_z(BEARING_D / 2, -1, BEARING_W),
-                 cyl_z(BEARING_D / 2, BEARING_W + 0.8, 2 * BEARING_W + 1.8),
-                 cyl_z(6.5, -1, 20)]
-    else:
-        cuts += [cyl_z(2.65, -1, HUB_T + 1, seg=32),
-                 cyl_z(BELL_BOSS_R, HUB_T - BELL_BOSS_T, HUB_T + 1)]
+    rim = union([rim, cyl_z(BEARING_D / 2 + 3, 0, 2 * BEARING_W + 0.8)])
+    cuts = [cyl_z(BEARING_D / 2, -1, BEARING_W),
+            cyl_z(BEARING_D / 2, BEARING_W + 0.8, 2 * BEARING_W + 1.8),
+            cyl_z(6.5, -1, 20)]
     for i in range(6):
         a = math.radians(i * 60 + 30)
         cuts.append(cyl_z(3.5, -1, HUB_T + 1, 15 * math.cos(a), 15 * math.sin(a), 32))
@@ -406,9 +520,10 @@ def place_knuckle_state(man, delta, side):
 
 # ---------------------------------------------------------------- макеты для просмотра
 def motor_proxy(side=1):
-    y0 = MOTOR_WALL_Y + MOTOR_WALL_T
-    m = union([cyl_y(MOTOR_BELL_R, y0, y0 + MOTOR_LEN, REAR_X, AXLE_Z),
-               cyl_y(2.5, y0 + MOTOR_LEN, y0 + MOTOR_LEN + 12, REAR_X, AXLE_Z, 24)])
+    """Мотор с валом и гайкой (без шестерни)."""
+    m = union([cyl_y(MOTOR_BELL_R, PLATE_Y1, BELL_TOP_Y, MOTOR_X, AXLE_Z),
+               cyl_y(2.5, BELL_TOP_Y, NUT_Y1 - 1, MOTOR_X, AXLE_Z, 24),
+               cyl_y(4.6, BELL_TOP_Y + PINION_W, NUT_Y1, MOTOR_X, AXLE_Z, 6)])
     return m if side > 0 else mirror_y(m)
 
 
@@ -454,16 +569,19 @@ def assembly(servo=0.0, with_drone=False):
     st = steer_state(delta_for_servo(servo)) if servo else steer_state(0.0)
     deck = make_deck()
     kn = make_knuckle()
-    rim_f, rim_r, tire = make_rim(True), make_rim(False), make_tire()
+    rim_f, tire = make_rim(True), make_tire()
     tire_placed = tire.translate([0, 0, 1.7])
     fw = union([rim_f, tire_placed])
-    rw = union([rim_r, tire_placed])
+    rw = union([make_rear_wheel(), tire_placed])
+    plate, pin = make_motor_plate(), make_pinion()
     parts = [deck, servo_proxy(st["phi"]), stack_proxy(), place_bar(make_tie_bar(), st)]
     for s in (-1, 1):
         front = union([kn, place_wheel(fw, FRONT_X)])
         parts.append(place_knuckle_state(front, st["dl"] if s > 0 else st["dr"], s))
-        parts.append(place_wheel(rw, REAR_X, s))
+        parts.append(place_rear_wheel(rw, s))
         parts.append(motor_proxy(s))
+        parts.append(place_pinion(pin, s))
+        parts.append(plate if s > 0 else mirror_y(plate))
     if with_drone:
         parts.append(drone_proxy())
     return union(parts)
@@ -506,6 +624,66 @@ def steering_check(deck, kn, fw):
     return ok
 
 
+def gear_check(deck):
+    """Редуктор: зацепление в 2D на полном обороте, касания колеса, мотора, шестерни."""
+    ok = True
+    pin2 = gear_profile(PINION_Z, shift=PROFILE_SHIFT)
+    gear2 = gear_profile(WHEEL_GEAR_Z, shift=-PROFILE_SHIFT)
+    worst = 0.0
+    step = 360.0 / PINION_Z
+    for i in range(41):
+        a = step * i / 40
+        p = pin2.rotate(a).translate([GEAR_A, 0])
+        g = gear2.rotate(180.0 / WHEEL_GEAR_Z - a / GEAR_RATIO)
+        worst = max(worst, (p ^ g).area())
+    # плотность зацепления: без зазора (CENTER_EXTRA и BACKLASH = 0) зубья должны пересекаться
+    tight = 0.0
+    p0 = gear_profile(PINION_Z, shift=PROFILE_SHIFT, backlash=-0.3)
+    g0 = gear_profile(WHEEL_GEAR_Z, shift=-PROFILE_SHIFT, backlash=-0.3)
+    for i in range(21):
+        a = step * i / 20
+        tight = max(tight, (p0.rotate(a).translate([GEAR_A - CENTER_EXTRA, 0]) ^
+                            g0.rotate(180.0 / WHEEL_GEAR_Z - a / GEAR_RATIO)).area())
+    pa = math.radians(20)
+    ra1 = GEAR_M * (PINION_Z / 2 + 1 + PROFILE_SHIFT)
+    ra2 = GEAR_M * (WHEEL_GEAR_Z / 2 + 1 - PROFILE_SHIFT)
+    rb1, rb2 = GEAR_M * PINION_Z / 2 * math.cos(pa), GEAR_M * WHEEL_GEAR_Z / 2 * math.cos(pa)
+    a0 = GEAR_M * (PINION_Z + WHEEL_GEAR_Z) / 2
+    eps = (math.sqrt(ra1**2 - rb1**2) + math.sqrt(ra2**2 - rb2**2) - a0 * math.sin(pa)) / (math.pi * GEAR_M * math.cos(pa))
+    good = worst < 0.01 and tight > 0.01 and eps > 1.2
+    ok &= good
+    print(f"Редуктор {PINION_Z}:{WHEEL_GEAR_Z} (1:{GEAR_RATIO:.0f}), модуль {GEAR_M}, межосевое {GEAR_A:.2f} мм: "
+          f"заклинивание {worst:.3f} мм², перекрытие ε={eps:.2f} [{'OK' if good else 'ПРОБЛЕМА'}]")
+
+    tire = make_tire().translate([0, 0, 1.7])
+    rw = union([make_rear_wheel(), tire])
+    plate, pin = make_motor_plate(), make_pinion()
+    for s in (-1, 1):
+        n = 'Л' if s > 0 else 'П'
+        wheel = place_rear_wheel(rw, s)
+        pl = plate if s > 0 else mirror_y(plate)
+        mot = motor_proxy(s)
+        pn = place_pinion(pin, s)
+        pairs = [("колесо–палуба", wheel, deck), ("колесо–плита", wheel, pl), ("колесо–мотор+гайка", wheel, mot),
+                 ("мотор–палуба", mot, deck), ("плита–палуба", pl, deck), ("шестерня–палуба", pn, deck),
+                 ("шестерня–плита", pn, pl), ("шестерня–колесо (зубья)", pn, wheel)]
+        for name, a, b in pairs:
+            v = (a ^ b).volume()
+            if v > 0.5:
+                print(f"  {n}: {name} пересекаются {v:.1f} мм³")
+                ok = False
+    other = mirror_y(plate)
+    v = (plate ^ other).volume()
+    ok &= v < 0.01
+    print(f"Задний мост: касаний нет [{'OK' if ok else 'ЕСТЬ'}]; зазор между плитами моторов {2 * PLATE_Y0:.1f} мм")
+    kv, volts = 1300, 22.2
+    rpm = kv * volts / GEAR_RATIO
+    v = rpm / 60 * 2 * math.pi * TIRE_R / 1000
+    print(f"Скорость без нагрузки (1300KV, 6S): {rpm:.0f} об/мин колеса ≈ {v:.0f} м/с = {v * 3.6:.0f} км/ч; "
+          f"20 % газа ≈ {v * 3.6 * 0.2:.0f} км/ч")
+    return ok
+
+
 def check():
     ok = True
     deck = make_deck()
@@ -532,15 +710,7 @@ def check():
         flag = "OK" if max_free is not None and max_free >= STEER_MAX else "МАЛО"
         ok &= flag == "OK"
         print(f"Палуба: колёса поворачиваются без касаний до ±{max_free:.0f}° [{flag}]")
-    # задние колёса и стенки
-    rw = union([make_rim(False), make_tire().translate([0, 0, 1.7])])
-    for s in (-1, 1):
-        v = (place_wheel(rw, REAR_X, s) ^ deck).volume()
-        print(f"Заднее колесо {'Л' if s > 0 else 'П'} vs палуба: {v:.2f} мм³")
-        ok &= v < 0.5
-        v = (motor_proxy(s) ^ deck).volume()
-        print(f"Мотор {'Л' if s > 0 else 'П'} vs палуба: {v:.2f} мм³")
-        ok &= v < 0.5
+    ok &= gear_check(deck)
     v = (servo_proxy() ^ deck).volume() + (stack_proxy() ^ deck).volume()
     print(f"Серво и стек vs палуба: {v:.2f} мм³")
     ok &= v < 0.5
@@ -549,6 +719,7 @@ def check():
     print(f"Земля на Z={ground:.1f}; низ палубы Z={-DECK_T:.1f} -> клиренс {-DECK_T - ground:.1f} мм; "
           f"нижняя плита дрона над землёй {TOWER_H - ground:.1f} мм")
     print(f"Верх колокола мотора Z={AXLE_Z + MOTOR_BELL_R:.1f}, до нижней плиты {TOWER_H - AXLE_Z - MOTOR_BELL_R:.1f} мм")
+    print(f"Колея: перед {2 * (WHEEL_OUT_Y - WHEEL_W / 2):.0f} мм, зад {2 * (REAR_WHEEL_OUT_Y - WHEEL_W / 2):.0f} мм")
     # зона винтов: доля проекции модуля внутри дисков винтов
     asm = assembly(0)
     proj = asm.project()
@@ -587,7 +758,11 @@ def export(out_dir):
         "car_knuckle_L_x1.stl": on_bed(kn.rotate([180, 0, 0])),
         "car_knuckle_R_x1.stl": on_bed(mirror_y(kn).rotate([180, 0, 0])),
         "car_rim_front_625_x2.stl": on_bed(make_rim(True)),
-        "car_rim_rear_motor_x2.stl": on_bed(make_rim(False)),
+        "car_rear_wheel_gear48_x2.stl": on_bed(make_rear_wheel()),
+        "car_pinion_12T_M5_x2.stl": on_bed(make_pinion()),
+        # плита мотора внутренней стороной на стол: отверстия мотора без поддержек
+        "car_motor_plate_L_x1.stl": on_bed(make_motor_plate().rotate([90, 0, 0])),
+        "car_motor_plate_R_x1.stl": on_bed(mirror_y(make_motor_plate()).rotate([-90, 0, 0])),
         "car_tire_TPU_x4.stl": on_bed(make_tire()),
     }
     # тяга вверх ногами: плоский верх на столе, бобышки растут вверх
@@ -599,6 +774,10 @@ def export(out_dir):
     # крупный план руля: перед палубы, серво, тяга, кулаки (без колёс), поворот влево
     st = steer_state(delta_for_servo(20))
     kn = make_knuckle()
+    tire = make_tire().translate([0, 0, 1.7])
+    parts["preview_gearbox_detail.stl"] = union(
+        [make_deck() ^ box(-110, -40, -45, 45, -10, 50), make_motor_plate(), motor_proxy(1),
+         place_pinion(make_pinion(), 1), place_rear_wheel(make_rear_wheel(), 1)])
     parts["preview_steering_detail.stl"] = union(
         [make_deck() ^ box(20, 80, -45, 45, -10, 50), servo_proxy(st["phi"]), place_bar(make_tie_bar(), st),
          place_knuckle_state(kn, st["dl"], 1), place_knuckle_state(kn, st["dr"], -1)])

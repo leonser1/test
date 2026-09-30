@@ -13,15 +13,18 @@ ITEMS = [
     ("preview_assembly.stl", "Сборка: колёса прямо", (25, -130)),
     ("preview_steering_detail.stl", "Руль: серво → паз → поперечная тяга → кулаки", (40, -145)),
     ("preview_assembly_left.stl", "Серво +30°: поворот влево (сверху)", (89, -90)),
+    ("car_motor_plate_L_x1.stl", "Съёмная плита мотора (как печатать)", (40, -60)),
+    ("preview_gearbox_detail.stl", "Редуктор 1:4: шестерня 12z → венец 48z", (15, -30)),
+    ("car_rear_wheel_gear48_x2.stl", "Заднее колесо с венцом (как печатать)", (40, -60)),
     ("preview_assembly_right.stl", "Серво −30°: поворот вправо (сверху)", (89, -90)),
-    ("car_deck_x1.stl", "Палуба: стек, серво, стойки, моторы", (35, -130)),
+    ("car_deck_x1.stl", "Палуба: стек, серво, стойки, задний мост", (35, -130)),
 ]
-fig = plt.figure(figsize=(15, 9.5))
+fig = plt.figure(figsize=(15, 13))
 for i, (fn, title, (el, az)) in enumerate(ITEMS):
     tm = trimesh.load(os.path.join(HERE, "stl", fn))
     if len(tm.faces) > 60000:
         tm = tm.simplify_quadric_decimation(face_count=60000) if hasattr(tm, "simplify_quadric_decimation") else tm
-    ax = fig.add_subplot(2, 3, i + 1, projection="3d")
+    ax = fig.add_subplot(3, 3, i + 1, projection="3d")
     tris = tm.vertices[tm.faces]
     light = np.array([0.4, -0.5, 0.8]); light /= np.linalg.norm(light)
     shade = 0.35 + 0.65 * np.clip(tm.face_normals @ light, 0, 1)
