@@ -1,15 +1,26 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<title>Стальной гигант</title>
+<title>Стальной гигант · виджет</title>
 <style>
-  html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+/* Layout: a fake desktop wallpaper with the widget's transparent canvas on top and a small control strip */
+:root{--wall-a:#2f4a6b;--wall-b:#8fb3d4;--glass:rgba(14,18,26,.6);--edge:rgba(255,255,255,.14);--ink:#eef1f5;--accent:#ffc233;color-scheme:dark}
+html,body{height:100%;margin:0;overflow:hidden;background:linear-gradient(170deg,var(--wall-a),var(--wall-b));color:var(--ink);font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.bar{position:fixed;z-index:2;top:calc(12px + env(safe-area-inset-top,0px));left:16px;right:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;pointer-events:none}
+.bar>*{pointer-events:auto}
+.tag{background:var(--glass);border:1px solid var(--edge);border-radius:9px;padding:8px 12px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.tag b{color:var(--accent)}
+.btns{display:flex;gap:6px;background:var(--glass);border:1px solid var(--edge);border-radius:9px;padding:5px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+button{font:500 13px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:transparent;border:1px solid transparent;border-radius:7px;padding:6px 11px;cursor:pointer}
+button:hover{background:rgba(255,255,255,.1)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tas.bar{position:fixed;z-index:2;left:0;right:0;bottom:0;height:0}
 </style>
-</head>
-<body>
-<canvas id="c"></canvas>
+<div class="bar">
+  <div class="tag">Превью виджета: так он живёт поверх рабочего стола. <b>Клик по гиганту</b> — помашет и взлетит.</div>
+  <div class="btns"><button id="bBattle">Бой с дронами</button><button id="bSummon">Позвать заново</button></div>
+</div>
+<script>window.GIANT_FIRST_BATTLE=true;</script>
+
+<canvas id="c" role="img" aria-label="Стальной гигант ходит, летает и сражается с FPV-дронами"></canvas>
 <script>
 (()=>{
 /* ---------- constants ---------- */
@@ -685,5 +696,8 @@ requestAnimationFrame(frame);
 if(api)api.ready();
 })();
 </script>
-</body>
-</html>
+
+<script>
+document.getElementById('bBattle').addEventListener('click',()=>window.__giant&&window.__giant.battle());
+document.getElementById('bSummon').addEventListener('click',()=>window.__giant&&window.__giant.summon());
+</script>

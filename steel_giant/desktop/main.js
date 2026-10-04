@@ -7,7 +7,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
 let tray = null;
-const settings = { size: 'medium', light: true, paused: false };
+const settings = { size: 'medium', paused: false };
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 
 function loadSettings() {
@@ -54,9 +54,9 @@ function buildMenu() {
   const set = (key, value) => { settings[key] = value; saveSettings(); pushSettings(); buildMenu(); };
   const items = [
     { label: 'Позвать гиганта', click: () => win && win.webContents.send('summon') },
+    { label: 'Бой с дронами', click: () => win && win.webContents.send('battle') },
     { type: 'separator' },
     { label: 'Пауза', type: 'checkbox', checked: settings.paused, click: (i) => set('paused', i.checked) },
-    { label: 'Свет глаз', type: 'checkbox', checked: settings.light, click: (i) => set('light', i.checked) },
     {
       label: 'Размер',
       submenu: [['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']].map(([key, label]) => ({
