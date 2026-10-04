@@ -55,6 +55,7 @@ function buildMenu() {
   const items = [
     { label: 'Позвать гиганта', click: () => win && win.webContents.send('summon') },
     { label: 'Бой с дронами', click: () => win && win.webContents.send('battle') },
+    { label: 'Погоня', click: () => win && win.webContents.send('chase') },
     { type: 'separator' },
     { label: 'Пауза', type: 'checkbox', checked: settings.paused, click: (i) => set('paused', i.checked) },
     {

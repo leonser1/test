@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('giant', {
   onSettings: (cb) => ipcRenderer.on('settings', (_e, s) => cb(s)),
   onSummon: (cb) => ipcRenderer.on('summon', () => cb()),
   onBattle: (cb) => ipcRenderer.on('battle', () => cb()),
+  onChase: (cb) => ipcRenderer.on('chase', () => cb()),
 });
