@@ -29,10 +29,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:640px){.tag{display:none}}
 </style>
 <div class="bar-top">
-  <div class="tag">Превью виджета на «рабочем столе». Окна можно <b>перетаскивать</b> и <b>закрывать</b>: гигант сидит на них, ездит и падает. Звук включится после клика.</div>
-  <div class="btns"><button id="bBoy">Мальчик</button><button id="bFinale">Финал</button><button id="bKnock">Стук в экран</button><button id="bChase">Погоня</button><button id="bBattle">Бой</button><button id="bWin">Новое окно</button><button id="bSummon">Позвать</button></div>
+  <div class="tag">Превью виджета на «рабочем столе». Через 10 секунд начнётся показ нового. Окна можно <b>перетаскивать</b> и <b>закрывать</b>: гигант сидит на них, ездит и падает. Звук включится после клика.</div>
+  <div class="btns"><button id="bShow">Всё новое</button><button id="bBoy">Мальчик</button><button id="bFinale">Финал</button><button id="bKnock">Стук в экран</button><button id="bChase">Погоня</button><button id="bBattle">Бой</button><button id="bWin">Новое окно</button><button id="bSummon">Позвать</button></div>
 </div>
-<script>window.GIANT_FIRST_BOY=true;</script>
 '''
 tail = '''
 <script>
@@ -58,7 +57,8 @@ tail = '''
   addWin(Math.round(W*0.56),Math.round(H*0.26),Math.round(440*s),Math.round(360*s),'Проводник','Документы · Загрузки · Рабочий стол');
   addEventListener('resize',feed);
   const on=(id,f)=>document.getElementById(id).addEventListener('click',f);
-  on('bBoy',()=>G.boy());on('bFinale',()=>G.finale());on('bKnock',()=>G.knock());on('bChase',()=>G.chase());on('bBattle',()=>G.battle());on('bSummon',()=>G.summon());
+  on('bShow',()=>G.showcase());on('bBoy',()=>G.boy());
+  setTimeout(()=>G.showcase(),9000);on('bFinale',()=>G.finale());on('bKnock',()=>G.knock());on('bChase',()=>G.chase());on('bBattle',()=>G.battle());on('bSummon',()=>G.summon());
   on('bWin',()=>addWin(Math.round(Math.random()*(W-420)),Math.round(H*0.2+Math.random()*H*0.4),Math.round(380*s),Math.round(240*s),'Окно','Новое окно для гиганта.'));
 })();
 </script>

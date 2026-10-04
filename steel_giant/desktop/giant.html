@@ -3510,10 +3510,28 @@ window.__giant={battle:startBattle,summon:()=>{parts.length=0;arrive()},chase:k=
 window.__giant.sound=sfxSet;
 {const st0=window.__giant.state;window.__giant.boy=a=>startBoy(a);window.__giant.state=()=>Object.assign(st0(),boyState())}
 /* ---------- cinema: entry points ---------- */
-window.__giant.finale=()=>startCinema('finale');window.__giant.knock=()=>startCinema('knock');
+window.__giant.finale=()=>startCinema('finale');window.__giant.showcase=()=>showcase();window.__giant.knock=()=>startCinema('knock');
 {const st1=window.__giant.state;window.__giant.state=()=>Object.assign(st1(),{cine:cine.task?cine.task.k+'/'+cine.task.st:null,camZ:+cam.z.toFixed(3),letterbox:+cam.lb.toFixed(2)})}
 if(api&&api.onFinale)api.onFinale(()=>startCinema('finale'));
 if(api&&api.onKnock)api.onKnock(()=>startCinema('knock'));
+/* ---------- showcase: plays the new scenes one after another (tray «Показать всё новое», first launch) ---------- */
+const SHOW=[['perch',22],['knock',24],['peek',16],['boy',0],['finale',70]];
+let showT=null;
+function showcase(){
+  clearTimeout(showT);let i=0;
+  const busy=()=>task&&(task.k==='battle'||task.k==='broken'||task.k==='victory')||(typeof cine!=='undefined'&&cine.task);
+  const step=()=>{
+    if(i>=SHOW.length)return;
+    if(busy()){showT=setTimeout(step,2000);return}
+    const [k,dur]=SHOW[i++];
+    if(k==='perch'||k==='peek'){if(!(window.PC&&PC.windows&&PC.windows.length)){step();return}window.__giant.world(k)}
+    else if(k==='boy'){if(window.PC&&PC.windows&&PC.windows.length)window.__giant.world('boy');else startBoy('ride');showT=setTimeout(step,45000);return}
+    else startCinema(k);
+    showT=setTimeout(step,dur*1000);
+  };
+  step();
+}
+if(api&&api.onShowcase)api.onShowcase(showcase);
 /* ---------- world: debug / test API ---------- */
 {const st1=window.__giant.state;window.__giant.world=k=>{const m={perch:()=>{const p=perchSegs();return p.length?perchTask(pick(p)):null},parkour:()=>parkourTask(3,true),peek:()=>{const p=peekSpots();return p.length?peekTask(pick(p)):null},night:nightTask,edge:edgeTask,boy:()=>{if(task&&task.k==='chase')endChase(task);boyS.met=true;return boyTask(['greet','pickup','perch','putdown','bye'])}};const t=m[k]&&m[k]();if(t&&!pieces){resetGiantStory();task=t;queue=[]}return !!t};
   window.__giant.state=()=>Object.assign(st1(),{sup:world.sup&&world.sup.id,virt:!!world.virt,floor:Math.round(GY),alt:Math.round(bot.alt),x:Math.round(bot.x),wst:task&&task.st,whoa:world.whoa?+world.whoa.t.toFixed(2):0,flame:+(world.flame||0).toFixed(2),whoaWhy:world.whoaWhy,sit:+world.sitK.toFixed(2),cur:world.cur&&world.cur.m,segs:world.segs.length,busy:wBusy(),night:wNight(),dozing:world.dozing})}

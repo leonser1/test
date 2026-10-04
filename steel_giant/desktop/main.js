@@ -109,10 +109,15 @@ function createWindow() {
 function buildMenu() {
   const set = (key, value) => { settings[key] = value; saveSettings(); pushSettings(); buildMenu(); if (key === 'pcWindows') pcUpdateWatcher(); };
   const items = [
+    { label: 'Стальной гигант 4.0', enabled: false },
+    { label: 'Показать всё новое', click: () => win && win.webContents.send('showcase') },
+    { type: 'separator' },
     { label: 'Позвать гиганта', click: () => win && win.webContents.send('summon') },
     { label: 'Бой с дронами', click: () => win && win.webContents.send('battle') },
     { label: 'Погоня', click: () => win && win.webContents.send('chase') },
     { label: 'Мальчик', click: () => win && win.webContents.send('boy') },
+    { label: 'Стук в экран', click: () => win && win.webContents.send('knock') },
+    { label: 'Финал «Супермен»', click: () => win && win.webContents.send('finale') },
     { type: 'separator' },
     { label: 'Пауза', type: 'checkbox', checked: settings.paused, click: (i) => set('paused', i.checked) },
     { label: 'Звук', type: 'checkbox', checked: settings.sound, click: (i) => set('sound', i.checked) },
@@ -138,7 +143,7 @@ function buildMenu() {
 app.whenReady().then(() => {
   loadSettings();
   tray = new Tray(nativeImage.createEmpty());
-  tray.setToolTip('Стальной гигант');
+  tray.setToolTip('Стальной гигант 4.0');
   buildMenu();
   createWindow();
 
@@ -147,7 +152,14 @@ app.whenReady().then(() => {
     const img = nativeImage.createFromDataURL(dataUrl);
     if (!img.isEmpty()) tray.setImage(img.resize({ width: 16, height: 16 }));
   });
-  ipcMain.on('ready', () => { pushSettings(); pcSend({ ...pc }); });
+  ipcMain.on('ready', () => {
+    pushSettings(); pcSend({ ...pc });
+    // first launch of this version: show what's new without waiting for the director
+    if (settings.seenVersion !== 4) {
+      settings.seenVersion = 4; saveSettings();
+      setTimeout(() => win && win.webContents.send('showcase'), 14000);
+    }
+  });
 
   screen.on('display-metrics-changed', fitToScreen);
   screen.on('display-added', fitToScreen);

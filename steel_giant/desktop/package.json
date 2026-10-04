@@ -1,6 +1,6 @@
 {
   "name": "steel-giant-desktop",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "description": "Стальной гигант: живой виджет на рабочем столе Windows",
   "main": "main.js",
   "scripts": {
@@ -14,7 +14,14 @@
   "build": {
     "appId": "local.steelgiant.desktop",
     "productName": "SteelGiant",
-    "files": ["main.js", "preload.js", "pcwatch.js", "giant.html"],
-    "win": { "target": "portable" }
+    "files": [
+      "main.js",
+      "preload.js",
+      "pcwatch.js",
+      "giant.html"
+    ],
+    "win": {
+      "target": "portable"
+    }
   }
 }

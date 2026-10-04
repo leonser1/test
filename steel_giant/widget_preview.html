@@ -22,10 +22,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:640px){.tag{display:none}}
 </style>
 <div class="bar-top">
-  <div class="tag">Превью виджета на «рабочем столе». Окна можно <b>перетаскивать</b> и <b>закрывать</b>: гигант сидит на них, ездит и падает. Звук включится после клика.</div>
-  <div class="btns"><button id="bBoy">Мальчик</button><button id="bFinale">Финал</button><button id="bKnock">Стук в экран</button><button id="bChase">Погоня</button><button id="bBattle">Бой</button><button id="bWin">Новое окно</button><button id="bSummon">Позвать</button></div>
+  <div class="tag">Превью виджета на «рабочем столе». Через 10 секунд начнётся показ нового. Окна можно <b>перетаскивать</b> и <b>закрывать</b>: гигант сидит на них, ездит и падает. Звук включится после клика.</div>
+  <div class="btns"><button id="bShow">Всё новое</button><button id="bBoy">Мальчик</button><button id="bFinale">Финал</button><button id="bKnock">Стук в экран</button><button id="bChase">Погоня</button><button id="bBattle">Бой</button><button id="bWin">Новое окно</button><button id="bSummon">Позвать</button></div>
 </div>
-<script>window.GIANT_FIRST_BOY=true;</script>
 <canvas id="c" role="img" aria-label="Стальной гигант живёт на рабочем столе: сидит на окнах, играет с мальчиком, сражается с FPV-дронами"></canvas>
 <script>
 (()=>{
@@ -3527,10 +3526,28 @@ window.__giant={battle:startBattle,summon:()=>{parts.length=0;arrive()},chase:k=
 window.__giant.sound=sfxSet;
 {const st0=window.__giant.state;window.__giant.boy=a=>startBoy(a);window.__giant.state=()=>Object.assign(st0(),boyState())}
 /* ---------- cinema: entry points ---------- */
-window.__giant.finale=()=>startCinema('finale');window.__giant.knock=()=>startCinema('knock');
+window.__giant.finale=()=>startCinema('finale');window.__giant.showcase=()=>showcase();window.__giant.knock=()=>startCinema('knock');
 {const st1=window.__giant.state;window.__giant.state=()=>Object.assign(st1(),{cine:cine.task?cine.task.k+'/'+cine.task.st:null,camZ:+cam.z.toFixed(3),letterbox:+cam.lb.toFixed(2)})}
 if(api&&api.onFinale)api.onFinale(()=>startCinema('finale'));
 if(api&&api.onKnock)api.onKnock(()=>startCinema('knock'));
+/* ---------- showcase: plays the new scenes one after another (tray «Показать всё новое», first launch) ---------- */
+const SHOW=[['perch',22],['knock',24],['peek',16],['boy',0],['finale',70]];
+let showT=null;
+function showcase(){
+  clearTimeout(showT);let i=0;
+  const busy=()=>task&&(task.k==='battle'||task.k==='broken'||task.k==='victory')||(typeof cine!=='undefined'&&cine.task);
+  const step=()=>{
+    if(i>=SHOW.length)return;
+    if(busy()){showT=setTimeout(step,2000);return}
+    const [k,dur]=SHOW[i++];
+    if(k==='perch'||k==='peek'){if(!(window.PC&&PC.windows&&PC.windows.length)){step();return}window.__giant.world(k)}
+    else if(k==='boy'){if(window.PC&&PC.windows&&PC.windows.length)window.__giant.world('boy');else startBoy('ride');showT=setTimeout(step,45000);return}
+    else startCinema(k);
+    showT=setTimeout(step,dur*1000);
+  };
+  step();
+}
+if(api&&api.onShowcase)api.onShowcase(showcase);
 /* ---------- world: debug / test API ---------- */
 {const st1=window.__giant.state;window.__giant.world=k=>{const m={perch:()=>{const p=perchSegs();return p.length?perchTask(pick(p)):null},parkour:()=>parkourTask(3,true),peek:()=>{const p=peekSpots();return p.length?peekTask(pick(p)):null},night:nightTask,edge:edgeTask,boy:()=>{if(task&&task.k==='chase')endChase(task);boyS.met=true;return boyTask(['greet','pickup','perch','putdown','bye'])}};const t=m[k]&&m[k]();if(t&&!pieces){resetGiantStory();task=t;queue=[]}return !!t};
   window.__giant.state=()=>Object.assign(st1(),{sup:world.sup&&world.sup.id,virt:!!world.virt,floor:Math.round(GY),alt:Math.round(bot.alt),x:Math.round(bot.x),wst:task&&task.st,whoa:world.whoa?+world.whoa.t.toFixed(2):0,flame:+(world.flame||0).toFixed(2),whoaWhy:world.whoaWhy,sit:+world.sitK.toFixed(2),cur:world.cur&&world.cur.m,segs:world.segs.length,busy:wBusy(),night:wNight(),dozing:world.dozing})}
@@ -3632,7 +3649,8 @@ if(api)api.ready();
   addWin(Math.round(W*0.56),Math.round(H*0.26),Math.round(440*s),Math.round(360*s),'Проводник','Документы · Загрузки · Рабочий стол');
   addEventListener('resize',feed);
   const on=(id,f)=>document.getElementById(id).addEventListener('click',f);
-  on('bBoy',()=>G.boy());on('bFinale',()=>G.finale());on('bKnock',()=>G.knock());on('bChase',()=>G.chase());on('bBattle',()=>G.battle());on('bSummon',()=>G.summon());
+  on('bShow',()=>G.showcase());on('bBoy',()=>G.boy());
+  setTimeout(()=>G.showcase(),9000);on('bFinale',()=>G.finale());on('bKnock',()=>G.knock());on('bChase',()=>G.chase());on('bBattle',()=>G.battle());on('bSummon',()=>G.summon());
   on('bWin',()=>addWin(Math.round(Math.random()*(W-420)),Math.round(H*0.2+Math.random()*H*0.4),Math.round(380*s),Math.round(240*s),'Окно','Новое окно для гиганта.'));
 })();
 </script>
