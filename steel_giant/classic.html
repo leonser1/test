@@ -276,19 +276,19 @@ function waist(ctx){
   rivets(ctx,[[-20,-14.5],[-10,-14.5],[0,-14.5],[10,-14.5],[20,-14.5]]);
   rrect(ctx,-12,-10,26,20,5);paint(ctx,'dark',false,{x:-12,w:26});
 }
-const CHEST=[[-36,-148],[28,-150],[50,-132],[54,-86],[36,-50],[-26,-48],[-42,-70],[-46,-122]];
+const CHEST=[[-24,-148],[28,-150],[50,-132],[54,-86],[36,-50],[-16,-48],[-28,-72],[-32,-124]];
 function torso(ctx){
   waist(ctx);
-  poly(ctx,CHEST);paint(ctx,'body',false,{x:-46,w:100});
+  poly(ctx,CHEST);paint(ctx,'body',false,{x:-32,w:86});
   poly(ctx,[[26,-148],[48,-131],[51,-88],[34,-54],[16,-54],[28,-90],[28,-128]]);paint(ctx,'facet');
-  poly(ctx,[[-26,-48],[36,-50],[42,-62],[-34,-62]]);paint(ctx,'shade');
+  poly(ctx,[[-16,-48],[36,-50],[42,-62],[-22,-62]]);paint(ctx,'shade');
   detail(ctx,false,()=>{
-    for(let i=0;i<7;i++){const x=-30+i*8;ctx.moveTo(x,-147);ctx.lineTo(x+8,-131)}
-    ctx.moveTo(-44,-128);ctx.lineTo(46,-131);
-    ctx.moveTo(-42,-96);ctx.lineTo(53,-96);
+    for(let i=0;i<6;i++){const x=-20+i*8;ctx.moveTo(x,-147);ctx.lineTo(x+8,-131)}
+    ctx.moveTo(-31,-128);ctx.lineTo(46,-131);
+    ctx.moveTo(-30,-96);ctx.lineTo(53,-96);
   });
   shine(ctx,()=>{ctx.moveTo(29,-148);ctx.lineTo(50,-131);ctx.lineTo(52,-88)});
-  rivets(ctx,[[-30,-124],[-18,-125],[-6,-126],[6,-126],[18,-127],[30,-127],[-30,-92],[-14,-92],[2,-92],[18,-92],[34,-92],[38,-110],[38,-74]]);
+  rivets(ctx,[[-20,-124],[-10,-125],[-6,-126],[6,-126],[18,-127],[30,-127],[-22,-92],[-10,-92],[2,-92],[18,-92],[34,-92],[38,-110],[38,-74]]);
 }
 function drawRobot(ctx,P,fl,x,y,dir){
   ctx.save();ctx.translate(x,y);ctx.scale(dir*SC,SC);ctx.rotate(P.tilt);ctx.lineJoin='round';ctx.lineCap='round';
@@ -302,7 +302,7 @@ function drawRobot(ctx,P,fl,x,y,dir){
 }
 
 /* shoulder rocket pod: rises out of the back of the shoulder */
-const TURRET_X=-22,TURRET_Y=-136,TURRET_RISE=24;
+const TURRET_X=-14,TURRET_Y=-136,TURRET_RISE=24;
 function turret(ctx,k,ang){
   ctx.save();ctx.translate(TURRET_X,TURRET_Y-TURRET_RISE*k);
   rrect(ctx,-5,0,10,26,3);paint(ctx,'ring',false,{x:-5,w:10});
