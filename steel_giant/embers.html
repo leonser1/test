@@ -7,7 +7,7 @@
   color-scheme:dark;
 }
 html,body{height:100%;margin:0;overflow:hidden;background:var(--night);color:var(--ink);font:14px var(--f-ui)}
-#sky{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block}
 .panel{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:center;
   background:var(--glass);border:1px solid var(--edge);border-radius:10px;padding:8px 14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);max-width:calc(100% - 32px);box-sizing:border-box}
 label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
@@ -18,14 +18,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--hot);outline-of
 .hint{color:var(--muted);font-size:12px}
 </style>
 
-<canvas id="sky" role="img" aria-label="Падающие горящие точки, как угольки после взрыва"></canvas>
+<canvas id="sky" role="img" aria-label="Падающие горящие точки, как угольки"></canvas>
 <div class="panel">
   <label for="dens">Густота <input id="dens" type="range" min="0" max="100" value="35"></label>
   <label for="wind">Ветер <input id="wind" type="range" min="-100" max="100" value="12"></label>
   <label for="slow">Медленно <input id="slow" type="range" min="20" max="100" value="55"></label>
-  <button id="boom">Взрыв</button>
   <button id="hide" aria-label="Скрыть панель">Скрыть панель</button>
-  <span class="hint">Клик по экрану — взрыв в этом месте</span>
 </div>
 
 <script>
@@ -54,27 +52,24 @@ el('dens').oninput=e=>density=+e.target.value;el('wind').oninput=e=>wind=+e.targ
 function spawn(x,y,vx,vy,heat,size){if(embers.length>=MAX)embers.shift();
   embers.push({x,y,vx,vy,t:heat,cool:0.07+Math.random()*0.1,r:size,ph:Math.random()*6.28,fl:5+Math.random()*9,sw:0.6+Math.random()*1.6,tr:[]})}
 function rainOne(){const r=Math.random();spawn(Math.random()*(W+200)-100,-10-Math.random()*40,(Math.random()-0.5)*20,20+Math.random()*40,0.55+Math.random()*0.35,0.7+r*r*1.6)}
-function burst(x,y,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=60+Math.random()*Math.random()*420;
-  spawn(x,y,Math.cos(a)*s,Math.sin(a)*s-60,0.85+Math.random()*0.15,0.7+Math.random()*1.5)}}
 
-el('boom').onclick=()=>burst(W*(0.2+Math.random()*0.6),H*(0.08+Math.random()*0.25),260);
 let hidden=false;const panel=document.querySelector('.panel');
 el('hide').onclick=()=>{hidden=true;panel.hidden=true};
-cv.addEventListener('pointerdown',e=>{if(hidden){hidden=false;panel.hidden=false;return}burst(e.clientX,e.clientY,220)});
+cv.addEventListener('pointerdown',()=>{if(hidden){hidden=false;panel.hidden=false}});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&hidden){hidden=false;panel.hidden=false}});
 
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let acc=0,last=performance.now(),autoBurst=3;
-burst(W*0.5,H*0.18,320);
+let acc=0,last=performance.now();
+/* fill the screen at start so it doesn't begin empty */
+for(let i=0;i<220;i++){rainOne();const p=embers[embers.length-1];p.y=Math.random()*H;p.t*=0.6+Math.random()*0.4}
 function frame(now){
   let dt=Math.min(0.05,(now-last)/1000);last=now;
   const tScale=(reduced?0.35:1)*(0.35+slow/100*0.65);dt*=tScale;
-  /* steady rain from the top + an occasional distant burst */
+  /* steady rain of embers from the top */
   acc+=dt*density*1.6;while(acc>1){acc--;rainOne()}
-  autoBurst-=dt;if(autoBurst<=0){autoBurst=6+Math.random()*8;burst(W*(0.1+Math.random()*0.8),H*(0.05+Math.random()*0.2),120+Math.random()*180)}
 
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.globalCompositeOperation='source-over';ctx.fillStyle='rgba(7,6,10,0.35)';ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='source-over';ctx.fillStyle='#07060a';ctx.fillRect(0,0,W,H);
   ctx.globalCompositeOperation='lighter';
   const wx=wind*0.9;
   for(let i=embers.length-1;i>=0;i--){const p=embers[i];
@@ -87,6 +82,8 @@ function frame(now){
     if(p.t<=0||p.y>H+20||p.x<-150||p.x>W+150){embers.splice(i,1);continue}
     const flick=0.75+0.25*Math.sin(now*0.001*p.fl+p.ph),a=Math.min(1,p.t*1.6)*flick;
     const s=TINTS[Math.max(0,Math.min(24,Math.round(p.t*24)))],sz=p.r*(2.2+1.6*p.t);
+    const [cr,cg,cb]=tint(p.t);ctx.globalAlpha=a*0.45;ctx.strokeStyle=`rgb(${cr},${cg},${cb})`;ctx.lineWidth=p.r*0.9;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(p.x-p.vx*0.06,p.y-p.vy*0.06);ctx.lineTo(p.x,p.y);ctx.stroke();
     ctx.globalAlpha=a*0.55;ctx.drawImage(s,p.x-sz,p.y-sz,sz*2,sz*2);
     const c=p.r*0.9;ctx.globalAlpha=a;ctx.drawImage(TINTS[Math.max(0,Math.min(24,Math.round(p.t*24+3)))],p.x-c,p.y-c,c*2,c*2);
   }
