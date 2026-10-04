@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('giant', {
   onSummon: (cb) => ipcRenderer.on('summon', () => cb()),
   onBattle: (cb) => ipcRenderer.on('battle', () => cb()),
   onChase: (cb) => ipcRenderer.on('chase', () => cb()),
+  onBoy: (cb) => ipcRenderer.on('boy', () => cb()),
 });

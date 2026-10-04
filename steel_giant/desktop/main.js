@@ -7,7 +7,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
 let tray = null;
-const settings = { size: 'medium', paused: false };
+const settings = { size: 'medium', paused: false, sound: true };
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 
 function loadSettings() {
@@ -42,6 +42,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -56,8 +57,10 @@ function buildMenu() {
     { label: 'Позвать гиганта', click: () => win && win.webContents.send('summon') },
     { label: 'Бой с дронами', click: () => win && win.webContents.send('battle') },
     { label: 'Погоня', click: () => win && win.webContents.send('chase') },
+    { label: 'Мальчик', click: () => win && win.webContents.send('boy') },
     { type: 'separator' },
     { label: 'Пауза', type: 'checkbox', checked: settings.paused, click: (i) => set('paused', i.checked) },
+    { label: 'Звук', type: 'checkbox', checked: settings.sound, click: (i) => set('sound', i.checked) },
     {
       label: 'Размер',
       submenu: [['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']].map(([key, label]) => ({
