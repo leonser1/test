@@ -306,6 +306,7 @@ function explosion(x,y,s){
   for(let i=0;i<9;i++)spawn({k:'smoke',x:x+(r()-0.5)*12*s,y:y+(r()-0.5)*12*s,vx:(r()-0.5)*80,vy:(r()-0.5)*60-10,life:1.2+r(),max:2.2,r:6*s,grow:22*s});
   for(let i=0;i<8;i++)spawn({k:'debris',x,y,vx:(r()-0.5)*320*s,vy:-80-r()*220*s,life:1.6+r(),max:2.6,r:1.6+r()*2.4,grow:0,a:r()*6,va:(r()-0.5)*20});
   fxBoom(x,y,s);
+  sfxBoom(x,y,s);
 }
 function stepParts(dt,G){
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.life-=dt;if(p.life<=0){parts.splice(i,1);continue}
@@ -1137,6 +1138,288 @@ function storyWatch(){
   if(task.k==='battle')story.lastBattle=bot.clock;
 }
 
+/* ---------- sound: synthesized WebAudio sfx (no files) — steps, jets, weapons, drones, wreck, sputnik, boy ---------- */
+/* Everything is generated on the fly. Quiet by default (master 0.35), compressor + limiter on the master,
+   capped voices, per-name throttling. Game state is *observed* in sfxFrame() so the rest of the code needs
+   only tiny hooks: sfxFrame(dt,flame) in frame(), sfxBoom(x,y,s) in explosion(), sfxApply(s) in applySettings().
+   Other code may call window.giantSfx(name,{x,...}); unknown names are ignored. */
+const SFX={on:true,vol:0.35,e:null,voices:0,last:{},loops:{},acc:0,beepT:0,quiet:0,wakeT:0,prev:{},boomT:0,boomK:0};
+const SFX_MAXV=24;
+const sPan=x=>clamp(((x??W/2)/Math.max(1,W))*1.6-0.8,-0.8,0.8);
+const sGk=()=>clamp(ds,0.5,1.3);   // giant scale factor: small giant -> quieter, higher
+function sfxBuild(ac){
+  const n=ac.sampleRate*2|0,wb=ac.createBuffer(1,n,ac.sampleRate),bb=ac.createBuffer(1,n,ac.sampleRate),w=wb.getChannelData(0),b=bb.getChannelData(0);
+  let l=0;for(let i=0;i<n;i++){w[i]=Math.random()*2-1;l=(l+0.02*w[i])/1.02;b[i]=l*3.5}
+  const dr=b[n-1]-b[0];for(let i=0;i<n;i++)b[i]-=dr*i/n;   // seamless brown-noise loop
+  const bus=ac.createGain(),comp=ac.createDynamicsCompressor(),master=ac.createGain(),lim=ac.createDynamicsCompressor(),out=ac.createGain();
+  comp.threshold.value=-14;comp.knee.value=12;comp.ratio.value=4;comp.attack.value=0.004;comp.release.value=0.25;
+  lim.threshold.value=-4;lim.knee.value=0;lim.ratio.value=20;lim.attack.value=0.001;lim.release.value=0.1;
+  master.gain.value=SFX.vol;out.gain.value=0.84;
+  bus.connect(comp);comp.connect(master);master.connect(lim);lim.connect(out);out.connect(ac.destination);
+  return{ac,bus,master,noise:wb,brown:bb,off:false};
+}
+function sfxEnsure(){
+  if(SFX.e||!SFX.on||SFX.failed)return SFX.e;
+  try{const C=window.AudioContext||window.webkitAudioContext;if(!C){SFX.failed=true;return null}
+    SFX.e=sfxBuild(new C({latencyHint:'playback'}));
+    SFX.e.ac.onstatechange=()=>{if(!SFX.e)return;if(SFX.e.ac.state==='running')SFX.ran=true;else sfxKillLoops()};
+  }catch(err){SFX.failed=true;SFX.e=null}
+  return SFX.e;
+}
+function sfxWake(){   // resume if allowed (throttled; in a plain browser only after a user gesture to avoid console noise)
+  const e=SFX.e;if(!e||e.off||!SFX.on||document.hidden||e.ac.state!=='suspended')return;
+  const now=performance.now();if(now-SFX.wakeT<500)return;SFX.wakeT=now;
+  const ua=navigator.userActivation;if(!api&&!SFX.ran&&ua&&!ua.hasBeenActive&&SFX.triedOnce)return;SFX.triedOnce=true;
+  try{e.ac.resume().catch(()=>{})}catch(_){}
+}
+function sfxSuspend(){const e=SFX.e;if(e&&!e.off&&e.ac.state==='running'){sfxKillLoops();try{e.ac.suspend().catch(()=>{})}catch(_){}}}
+function sfxSet(on){
+  if(on===undefined){const e=SFX.e;return{on:SFX.on,vol:SFX.vol,state:e?e.ac.state:'none',voices:SFX.voices,loops:Object.keys(SFX.loops)}}
+  SFX.on=!!on;
+  if(!SFX.on){if(SFX.e){SFX.e.master.gain.setTargetAtTime(0,SFX.e.ac.currentTime,0.03);setTimeout(()=>{if(!SFX.on)sfxSuspend()},150)}}
+  else{sfxEnsure();if(SFX.e){SFX.e.master.gain.setTargetAtTime(SFX.vol,SFX.e.ac.currentTime,0.05);SFX.triedOnce=false;sfxWake()}}
+  return SFX.on;
+}
+function sfxApply(s){
+  if(typeof s.volume==='number'){SFX.vol=clamp(s.volume,0,1);if(SFX.e&&SFX.on)SFX.e.master.gain.setTargetAtTime(SFX.vol,SFX.e.ac.currentTime,0.05)}
+  if(typeof s.sound==='boolean'&&s.sound!==SFX.on)sfxSet(s.sound);
+}
+for(const ev of ['pointerdown','keydown','mousemove','touchstart'])addEventListener(ev,()=>{if(SFX.on){sfxEnsure();sfxWake()}},{passive:true});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)sfxSuspend();else sfxWake()});
+
+/* --- voice + node helpers --- */
+function sv(x,dur,vol,prio){
+  const e=SFX.e;if(!e||(!e.off&&e.ac.state!=='running'))return null;
+  if(!e.off&&(SFX.voices>=SFX_MAXV+(prio?6:0)))return null;
+  const ac=e.ac,g=ac.createGain();g.gain.value=vol;let o=g;
+  if(ac.createStereoPanner){const p=ac.createStereoPanner();p.pan.value=sPan(x);g.connect(p);o=p}
+  o.connect(e.bus);const v={ac,e,g,t:ac.currentTime+0.004};
+  if(!e.off){SFX.voices++;SFX.quiet=0;setTimeout(()=>{try{g.disconnect();o.disconnect()}catch(_){}SFX.voices--},(dur+0.25)*1000)}
+  return v;
+}
+function sOsc(v,type,f0,f1,t0,dur,ramp){const o=v.ac.createOscillator();o.type=type;o.frequency.setValueAtTime(f0,t0);if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t0+(ramp||dur));o.start(t0);o.stop(t0+dur+0.05);return o}
+function sNoise(v,t0,dur,brown){const s=v.ac.createBufferSource();s.buffer=brown?v.e.brown:v.e.noise;s.loop=true;s.start(t0,Math.random()*1.5);s.stop(t0+dur+0.05);return s}
+function sFilt(v,type,f,Q,f1,t0,dur){const b=v.ac.createBiquadFilter();b.type=type;b.frequency.setValueAtTime(f,t0||v.t);if(Q!=null)b.Q.value=Q;if(f1)b.frequency.exponentialRampToValueAtTime(f1,(t0||v.t)+dur);return b}
+// layer: src -> filters -> envelope(attack a, peak, optional hold, exp decay d) -> voice
+function sL(v,src,fl,t0,a,peak,d,hold){
+  const g=v.ac.createGain(),h=hold||0;g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(peak,t0+a);
+  if(h)g.gain.setValueAtTime(peak,t0+a+h);g.gain.exponentialRampToValueAtTime(0.0006,t0+a+h+d);g.gain.linearRampToValueAtTime(0,t0+a+h+d+0.02);
+  let n=src;for(const f of fl){n.connect(f);n=f}n.connect(g);g.connect(v.g);return g;
+}
+const sTone=(v,type,f0,f1,t0,a,peak,d,hold,fl)=>sL(v,sOsc(v,type,f0,f1,t0,a+(hold||0)+d),fl||[],t0,a,peak,d,hold);
+const sHiss=(v,t0,a,peak,d,fl,hold,brown)=>sL(v,sNoise(v,t0,a+(hold||0)+d,brown),fl,t0,a,peak,d,hold);
+function sMetal(v,t0,f,peak,d,parts){for(const [r,a] of parts||[[1,1],[2.76,0.55],[5.4,0.3]])sTone(v,'triangle',f*r*rand(0.98,1.02),0,t0,0.002,peak*a,d/(0.6+r*0.4))}
+function sCrackle(v,t0,dur,n,peak){   // one noise source, many tiny gain spikes
+  const s=sNoise(v,t0,dur),hp=sFilt(v,'highpass',1800,0.7),g=v.ac.createGain(),ts=[];g.gain.setValueAtTime(0,t0);
+  for(let i=0;i<n;i++)ts.push(t0+Math.pow(Math.random(),1.6)*dur);ts.sort((a,b)=>a-b);
+  let lt=t0;for(const t of ts){if(t<lt+0.035)continue;lt=t;const a=peak*rand(0.3,1)*(1-0.7*(t-t0)/dur);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(a,t+0.002);g.gain.linearRampToValueAtTime(0,t+0.03)}
+  s.connect(hp);hp.connect(g);g.connect(v.g);
+}
+
+/* --- one-shot sounds --- */
+const SND={
+  step(d){const k=sGk(),v=sv(d.x??bot.x,0.7,0.5*(0.5+0.5*k));if(!v)return;const t=v.t,p=rand(0.9,1.1)/Math.pow(k,0.3);
+    sTone(v,'sine',74*p,34*p,t,0.006,1,0.42);
+    sHiss(v,t,0.004,0.55,0.15,[sFilt(v,'lowpass',380*p,0.7)]);
+    sHiss(v,t+0.01,0.002,0.12,0.03,[sFilt(v,'bandpass',1700*p,2)]);
+    sMetal(v,t+0.012,300*p,0.1,0.24)},
+  land(d){const k=sGk(),v=sv(d.x??bot.x,1.4,0.6*(0.5+0.5*k),1);if(!v)return;const t=v.t,p=1/Math.pow(k,0.3);
+    sTone(v,'sine',62*p,27*p,t,0.006,1,0.75);
+    sHiss(v,t,0.005,0.7,0.45,[sFilt(v,'lowpass',520*p,0.7,160,t,0.45)]);
+    sHiss(v,t+0.02,0.03,0.16,0.9,[sFilt(v,'highpass',2600,0.5)]);
+    sMetal(v,t+0.015,210*p,0.12,0.4)},
+  liftoff(d){const k=sGk(),v=sv(d.x??bot.x,1.6,0.5*(0.5+0.5*k),1);if(!v)return;const t=v.t;
+    sHiss(v,t,0.35,0.5,0.95,[sFilt(v,'bandpass',260,1.2,1700,t,1.0)]);
+    sTone(v,'sine',58,34,t,0.01,0.5,0.5);
+    sCrackle(v,t,0.4,10,0.25)},
+  servo(d){const v=sv(d.x??bot.x,0.8,0.8);if(!v)return;const t=v.t,big=d.kind==='turret',f0=big?110:165,f1=big?260:390,du=big?0.42:0.3;
+    const bp=()=>sFilt(v,'bandpass',big?700:950,3);
+    sTone(v,'sawtooth',f0,f1,t,0.04,0.12,0.12,du-0.1,[bp()]);
+    sTone(v,'sawtooth',f0*1.51,f1*1.51,t,0.04,0.06,0.12,du-0.1,[bp()]);
+    if(big)sHiss(v,t,0.08,0.06,0.3,[sFilt(v,'bandpass',2600,1.5)],0.15);
+    sMetal(v,t+du,big?620:900,0.06,0.08)},
+  unservo(d){const v=sv(d.x??bot.x,0.5,1.2);if(!v)return;const t=v.t,big=d.kind==='turret';
+    sTone(v,'sawtooth',big?240:360,big?100:150,t,0.03,0.09,0.1,big?0.25:0.16,[sFilt(v,'bandpass',800,3)])},
+  clunk(d){const v=sv(d.x??bot.x,0.4,1.2);if(!v)return;const t=v.t;
+    sTone(v,'sine',90,55,t,0.003,0.45,0.15);
+    sTone(v,'triangle',200,120,t,0.002,0.22,0.12);
+    sHiss(v,t,0.002,0.18,0.07,[sFilt(v,'bandpass',1100,2)])},
+  charge(d){const v=sv(d.x??bot.x,0.5,0.4);if(!v)return;const t=v.t;
+    sTone(v,'sine',300,1150,t,0.22,0.12,0.12,0,[]);sTone(v,'triangle',602,2300,t,0.22,0.03,0.1)},
+  laser(d){const v=sv(d.x,0.6,1.1,1);if(!v)return;const t=v.t;
+    sTone(v,'sawtooth',2400,220,t,0.003,0.3,0.3,0,[sFilt(v,'bandpass',1800,3,500,t,0.3)]);
+    sHiss(v,t,0.003,0.3,0.26,[sFilt(v,'highpass',3200,0.7)]);
+    sTone(v,'sine',900,110,t,0.003,0.2,0.22)},
+  plasma(d){const v=sv(d.x,0.3,2.4);if(!v)return;const t=v.t,p=rand(0.92,1.08);
+    sTone(v,'square',1500*p,320*p,t,0.002,0.16,0.13,0,[sFilt(v,'lowpass',3600,0.7)]);
+    sTone(v,'sine',2600*p,700*p,t,0.002,0.2,0.08);
+    sHiss(v,t,0.001,0.12,0.03,[sFilt(v,'highpass',4000,0.7)])},
+  missile(d){const v=sv(d.x,1.0,1.4,1);if(!v)return;const t=v.t;
+    sHiss(v,t,0.002,0.5,0.08,[sFilt(v,'lowpass',1900,0.7)]);
+    sTone(v,'sine',130,48,t,0.003,0.4,0.16);
+    sHiss(v,t+0.02,0.05,0.4,0.7,[sFilt(v,'bandpass',500,1.5,2800,t,0.6)])},
+  boom(d){const k=clamp(d.k??1,0.2,3.2),dur=0.5+0.45*Math.min(2.5,k),v=sv(d.x,dur+0.4,0.55*Math.min(1.35,Math.pow(k,0.6)),1);if(!v)return;
+    const t=v.t,p=rand(0.9,1.1)/Math.pow(k,0.25);
+    sHiss(v,t,0.004,0.9,dur,[sFilt(v,'lowpass',2600*p,0.6,170,t,dur)]);
+    sTone(v,'sine',92*p,28,t,0.005,1,dur*0.9,0,[]);
+    sCrackle(v,t+0.04,dur,6+k*6,0.35)},
+  bigboom(d){const v=sv(d.x,4.2,0.7,1);if(!v)return;const t=v.t;
+    sHiss(v,t,0.004,1,1.3,[sFilt(v,'lowpass',3000,0.6,150,t,1.3)]);
+    sTone(v,'sine',70,24,t,0.006,1,1.6);
+    sHiss(v,t,0.08,0.8,3.2,[sFilt(v,'lowpass',130,0.7)],0,true);
+    sCrackle(v,t+0.05,2.2,40,0.35);
+    sTone(v,'sawtooth',72,38,t+0.3,0.3,0.12,1.6,0,[sFilt(v,'lowpass',320,2)]);
+    for(let i=0;i<5;i++)sMetal(v,t+0.1+i*rand(0.08,0.2),rand(260,900),0.06,1.0)},
+  dive(d){const v=sv(d.x,1.4,0.4);if(!v)return;const t=v.t;
+    sTone(v,'sawtooth',700,1900,t,0.2,0.18,0.4,0.6,[sFilt(v,'bandpass',1600,4,3000,t,1.1)]);
+    sTone(v,'square',712,1930,t,0.2,0.06,0.4,0.6,[sFilt(v,'lowpass',2500,0.7)])},
+  clatter(d){const v=sv(d.x,0.6,1.3*clamp(d.k??0.6,0.2,1));if(!v)return;const t=v.t,f=rand(260,560)/Math.sqrt(clamp((d.size||20)/20,0.5,3));
+    sMetal(v,t,f,0.22,rand(0.25,0.5));
+    sHiss(v,t,0.001,0.25,0.03,[sFilt(v,'bandpass',2500,1.5)]);
+    sTone(v,'sine',110,60,t,0.003,0.4,0.1)},
+  creak(d){const v=sv(d.x,0.8,1.2);if(!v)return;const t=v.t;
+    sTone(v,'sawtooth',rand(60,80),rand(95,140),t,0.08,0.22,0.45,0.1,[sFilt(v,'bandpass',rand(500,800),10)]);
+    if(Math.random()<0.6)sTone(v,'square',rand(1800,2600),0,t+0.05,0.002,0.03,0.05)},
+  zap(d){const v=sv(d.x,0.3,0.4);if(!v)return;const t=v.t;
+    sHiss(v,t,0.002,0.5,0.09,[sFilt(v,'bandpass',rand(2500,4500),1.5)],0.03);sTone(v,'square',rand(90,140),0,t,0.002,0.25,0.08,0.04,[sFilt(v,'lowpass',1200,1)])},
+  clack(d){const q=clamp(d.q??0.5,0,1),v=sv(d.x,0.5,1.4,1);if(!v)return;const t=v.t,f=480*(1+0.9*q);
+    sHiss(v,t,0.001,0.3,0.015,[sFilt(v,'highpass',3000,0.7)]);
+    sTone(v,'sine',3200,600,t,0.001,0.06,0.05);
+    sMetal(v,t+0.004,f,0.14,0.32,[[1,1],[1.5,0.5],[2.9,0.25]]);
+    sTone(v,'sine',150,80,t,0.002,0.35,0.08)},
+  eyesOn(d){const v=sv(d.x,1.8,0.32,1);if(!v)return;const t=v.t;
+    sTone(v,'sine',180,720,t,0.4,0.3,0.9,0.1,[]);sTone(v,'triangle',360,1440,t,0.4,0.08,0.7);
+    for(const f of [440,554,659])sTone(v,'sine',f,0,t+0.45,0.25,0.07,1.0)},
+  beep(d){const v=sv(d.x,0.45,0.07);if(!v)return;const t=v.t;sTone(v,'sine',1000,0,t,0.008,1,0.025,0.27)},
+  /* boy companion — light and cute */
+  boyLaugh(d){const v=sv(d.x,0.9,0.22);if(!v)return;const n=3+(Math.random()*3|0),b=rand(400,470);
+    for(let i=0;i<n;i++){const t=v.t+i*rand(0.11,0.14),f=b*(1-0.06*i)*rand(0.97,1.03);
+      sHiss(v,t,0.01,0.12,0.04,[sFilt(v,'bandpass',1800,1.5)]);
+      sTone(v,'triangle',f*1.08,f*0.9,t+0.015,0.012,0.5,0.07,0.02,[sFilt(v,'bandpass',1100,1.2)]);
+      sTone(v,'sine',f*1.08,f*0.9,t+0.015,0.012,0.2,0.07,0.02)}},
+  boyGasp(d){const v=sv(d.x,0.5,0.5);if(!v)return;const t=v.t;
+    sHiss(v,t,0.14,0.3,0.12,[sFilt(v,'bandpass',1400,2,2300,t,0.25)]);
+    sTone(v,'triangle',380,640,t+0.04,0.06,0.25,0.18,0,[sFilt(v,'bandpass',1200,1)])},
+  boyTalk(d){const v=sv(d.x,0.8,0.55);if(!v)return;const n=2+(Math.random()*3|0);
+    for(let i=0;i<n;i++){const t=v.t+i*0.12,f=rand(380,560);sTone(v,'triangle',f,f*rand(0.85,1.2),t,0.015,0.5,0.06,0.03,[sFilt(v,'bandpass',rand(900,1500),1.4)])}},
+  pickup(d){const v=sv(d.x,0.35,1.0);if(!v)return;const t=v.t;sTone(v,'sine',420,980,t,0.005,0.5,0.14,0,[]);sTone(v,'triangle',840,1960,t,0.005,0.12,0.1)},
+  hug(d){const v=sv(d.x,2.4,0.11);if(!v)return;const t=v.t;
+    for(const f of [262,330,392,523])sTone(v,'sine',f,0,t,0.5,0.22,1.2,0.3,[sFilt(v,'lowpass',1500,0.7)])},
+  bubble(d){const v=sv(d.x,0.2,1.3);if(!v)return;const t=v.t;sTone(v,'sine',500,1300,t,0.003,0.5,0.07,0,[]);sHiss(v,t,0.001,0.06,0.01,[sFilt(v,'highpass',5000,0.7)])},
+};
+SND.chirp=SND.boyTalk;
+const SFX_GAP={step:0.12,land:0.3,liftoff:0.4,plasma:0.05,missile:0.08,boom:0.05,bigboom:1,dive:0.4,clatter:0.05,creak:0.25,zap:0.12,clack:0.025,beep:0.2,servo:0.15,unservo:0.15,clunk:0.12,laser:0.1,charge:0.2,boyLaugh:0.6,boyGasp:0.4,boyTalk:0.3,bubble:0.08,pickup:0.15,hug:1};
+function sfx(name,d){
+  try{
+    const f=SND[name];if(!f||!SFX.on)return;
+    if(!sfxEnsure())return;
+    const e=SFX.e;if(e.ac.state!=='running'){sfxWake();return}
+    const now=e.ac.currentTime,lt=SFX.last[name]||-9;if(now-lt<(SFX_GAP[name]??0.03))return;SFX.last[name]=now;
+    f(d||{});
+  }catch(err){}
+}
+window.giantSfx=(name,data)=>sfx(name,data);
+function sfxBoom(x,y,s){
+  if(!SFX.on)return;
+  if(pieces&&!wreck){sfx('bigboom',{x});return}   // inside breakApart: one big blast instead of five small ones
+  const k=s/ds,now=SFX.e?SFX.e.ac.currentTime:0;
+  if(now-SFX.boomT<0.06&&k<SFX.boomK*1.3)return;SFX.boomT=now;SFX.boomK=k;SFX.last.boom=0;
+  sfx('boom',{x,k});
+}
+
+/* --- continuous loops (created on demand, stopped when silent for a while) --- */
+function sLoopBase(e){const ac=e.ac,g=ac.createGain();g.gain.value=0;let o=g;if(ac.createStereoPanner){o=ac.createStereoPanner();g.connect(o)}o.connect(e.bus);
+  const L={ac,e,g,pan:o!==g?o:null,srcs:[],idle:0};
+  L.src=(s,...fl)=>{let n=s;for(const f of fl){n.connect(f);n=f}n.connect(g);s.start();L.srcs.push(s);return s};
+  L.osc=(type,f)=>{const s=ac.createOscillator();s.type=type;s.frequency.value=f;return s};
+  L.nz=brown=>{const s=ac.createBufferSource();s.buffer=brown?e.brown:e.noise;s.loop=true;return s};
+  L.flt=(type,f,Q)=>{const b=ac.createBiquadFilter();b.type=type;b.frequency.value=f;if(Q!=null)b.Q.value=Q;return b};
+  L.amp=v=>{const a=ac.createGain();a.gain.value=v;return a};
+  return L;
+}
+const LOOPS={
+  jet(e){const L=sLoopBase(e);L.lp=L.flt('lowpass',400,0.8);
+    L.src(L.nz(true),L.lp);L.src(L.nz(false),L.flt('bandpass',1900,0.7),L.amp(0.07));
+    L.src(L.osc('sawtooth',44),L.flt('lowpass',120,1),L.amp(0.35));
+    const lfo=L.osc('sine',7),dep=L.amp(90);lfo.connect(dep);dep.connect(L.lp.frequency);lfo.start();L.srcs.push(lfo);return L},
+  drones(e){const L=sLoopBase(e),bp=L.flt('bandpass',1500,1.4);L.o1=L.osc('sawtooth',190);L.o2=L.osc('square',253);
+    const lfo=L.osc('sine',11),dep=L.amp(35);lfo.connect(dep);dep.connect(L.o1.detune);dep.connect(L.o2.detune);lfo.start();L.srcs.push(lfo);
+    L.src(L.o1,L.amp(0.6),bp);L.src(L.o2,L.amp(0.3),bp);L.src(L.nz(false),L.flt('bandpass',4200,1),L.amp(0.12));return L},
+  hum(e){const L=sLoopBase(e),lp=L.flt('lowpass',1400,1);L.tc=0.03;
+    L.src(L.osc('sawtooth',98),lp);L.src(L.osc('sawtooth',99.6),lp);L.src(L.osc('square',196),L.amp(0.4),lp);
+    L.src(L.nz(false),L.flt('bandpass',5200,2),L.amp(0.5));return L},
+  hiss(e){const L=sLoopBase(e);L.src(L.nz(false),L.flt('bandpass',3000,0.8));return L},
+  mag(e){const L=sLoopBase(e);L.o1=L.osc('sawtooth',50);L.o2=L.osc('sine',100);
+    L.src(L.o1,L.flt('lowpass',380,2),L.amp(0.5));L.src(L.o2,L.amp(0.6));return L},
+};
+function sfxKillLoops(){for(const n in SFX.loops){const L=SFX.loops[n];for(const s of L.srcs)try{s.stop()}catch(_){}try{L.g.disconnect();if(L.pan)L.pan.disconnect()}catch(_){}}SFX.loops={}}
+function sLoop(name,gain,x,dt,fn){
+  let L=SFX.loops[name];const e=SFX.e;
+  if(gain>0.0005&&!L){if(!e||e.ac.state!=='running')return;L=SFX.loops[name]=LOOPS[name](e)}
+  if(!L)return;
+  const t=L.ac.currentTime;L.g.gain.setTargetAtTime(gain,t,L.tc||0.12);
+  if(L.pan&&x!=null)L.pan.pan.setTargetAtTime(sPan(x),t,0.1);
+  if(fn)fn(L,t);
+  if(gain<=0.0005){L.idle+=dt;if(L.idle>1.5){for(const s of L.srcs)try{s.stop()}catch(_){}try{L.g.disconnect();if(L.pan)L.pan.disconnect()}catch(_){}delete SFX.loops[name]}}else L.idle=0;
+}
+
+/* --- per-frame observer: turns game-state changes into sounds --- */
+function sfxFrame(dt,flame){
+  if(!SFX.on)return;
+  const e=SFX.e||sfxEnsure();if(!e)return;
+  if(e.ac.state!=='running'){if(!paused)sfxWake();return}
+  const P=SFX.prev,k=sGk(),live=!paused;
+  // auto-suspend when idle (saves CPU on the desktop); woken again by the next sound
+  const busy=SFX.voices>0||Object.keys(SFX.loops).length>0;
+  SFX.quiet=busy?0:SFX.quiet+dt;if(SFX.quiet>(paused?1:6)){SFX.quiet=0;sfxSuspend();return}
+  if(live){
+    const st=bot.state;
+    if(st==='ground'&&bot.stepIdx!==P.step&&bot.amp>0.4)sfx('step',{x:bot.x});
+    P.step=bot.stepIdx;
+    if(st!==P.st){if(st==='fly'&&P.st==='launch')sfx('liftoff',{x:bot.x});if(st==='land'&&P.st==='fly')sfx('land',{x:bot.x})}
+    P.st=st;
+    if(!pieces){
+      for(const [key,kind] of [['armGun','arm'],['turret','turret']]){const v=bot[key],pv=P[key]??0;
+        if(pv<0.02&&v>=0.02&&v>pv)sfx('servo',{x:bot.x,kind});
+        if(pv>0.9&&v<pv&&!P[key+'D']){P[key+'D']=1;sfx('unservo',{x:bot.x,kind})}
+        if(P[key+'D']&&pv>=0.04&&v<0.04){P[key+'D']=0;sfx('clunk',{x:bot.x})}
+        if(v>pv)P[key+'D']=0;P[key]=v}
+      if((P.eye??0)<0.05&&bot.eyeCharge>=0.05)sfx('charge',{x:bot.x});
+      if(wp.beam&&!P.beam)sfx('laser',{x:wp.beam.x});
+    }else{P.armGun=P.turret=0;P.armGunD=P.turretD=0}
+    P.eye=bot.eyeCharge;P.beam=wp.beam;
+    for(const b of bullets)if(!b._sfx){b._sfx=1;sfx(b.k==='missile'?'missile':'plasma',{x:b.x})}
+    for(const d of drones){if(d.state==='dive'&&d.alive){if(!d._sfx){d._sfx=1;sfx('dive',{x:d.x})}}else d._sfx=0}
+    if(pieces){
+      const gather=wreck&&wreck.stage==='gather';
+      for(const p of pieces){
+        if(!gather){
+          if(p._vy!=null&&p._vy>70*ds&&p.vy<=0&&p.y>=G-p.hh-1)sfx('clatter',{x:p.x,k:p._vy/(500*ds),size:p.hh/SC});
+          else if(wreck&&wreck.stage==='lie'&&p._vy!=null&&Math.abs(p._vy)<1&&p.vy<-50*ds)sfx('creak',{x:p.x});
+          p._vy=p.vy;
+        }else if(p.g&&p.g.done&&!p._dn){p._dn=1;sfx('clack',{x:p.x,q:(GATHER_ORDER[p.id]??1.3)/2.6});if(p.id==='head')sfx('eyesOn',{x:p.x})}
+      }
+      if(wreck&&wreck.stage==='lie'&&wreck.eyes&&!P.weyes)sfx('zap',{x:wreck.ax??pieces[0].x});
+      P.weyes=wreck&&wreck.eyes;
+    }
+    if(toy&&toy.kind==='sat'){SFX.beepT-=dt;if(SFX.beepT<=0){SFX.beepT+=0.6;if(SFX.beepT<0)SFX.beepT=0.6;sfx('beep',{x:toy.x})}}else SFX.beepT=0.15;
+  }
+  // loops, updated at ~20 Hz
+  SFX.acc+=dt;if(SFX.acc<0.05)return;const ldt=SFX.acc;SFX.acc=0;
+  const fl=live&&!pieces?flame:0;
+  sLoop('jet',fl*0.12*(0.5+0.5*k),bot.x,ldt,(L,t)=>L.lp.frequency.setTargetAtTime(220+520*fl+Math.min(400,Math.abs(bot.vx)*0.8),t,0.15));
+  let dw=0,dx=0,dsp=0,c=null;
+  if(live)for(const d of drones){if(!d.alive)continue;c=c||botCenter();
+    let w=1/(1+Math.hypot(d.x-c.x,d.y-c.y)/(300*ds));if(d.x<0||d.x>W)w*=0.4;dw+=w;dx+=d.x*w;dsp+=Math.hypot(d.vx,d.vy)/ds*w}
+  sLoop('drones',dw?0.075*Math.pow(Math.min(3,dw),0.7):0,dw?dx/dw:null,ldt,dw?(L,t)=>{const f=170+clamp(dsp/dw,0,600)*0.28;L.o1.frequency.setTargetAtTime(f,t,0.2);L.o2.frequency.setTargetAtTime(f*1.33,t,0.2)}:null);
+  sLoop('hum',live&&wp.beam?0.035:0,wp.beam?bot.x:null,ldt);
+  let ms=0,mx=0;if(live)for(const b of bullets)if(b.k==='missile'){ms++;mx+=b.x}
+  sLoop('hiss',ms?0.035*Math.min(2,Math.sqrt(ms)):0,ms?mx/ms:null,ldt);
+  const g=live&&wreck&&wreck.stage==='gather';
+  sLoop('mag',g?0.05+0.04*Math.min(1,wreck.t/3.2):0,g?wreck.ax:null,ldt,g?(L,t)=>{const f=48+60*Math.min(1,wreck.t/3.2);L.o1.frequency.setTargetAtTime(f,t,0.2);L.o2.frequency.setTargetAtTime(f*2,t,0.2)}:null);
+}
+sfxEnsure();
+
 /* ---------- view, input, IPC ---------- */
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 let paused=false,ignoring=true,hover=false;
@@ -1160,6 +1443,7 @@ addEventListener('mousedown',()=>{
 function applySettings(s){
   if(s.size&&SIZES[s.size]){SC=SIZES[s.size];VW=34*SC*OMEGA}
   if(typeof s.paused==='boolean')paused=s.paused;
+  sfxApply(s);
 }
 if(api){
   api.onSettings(applySettings);
@@ -1169,6 +1453,7 @@ if(api){
 }
 window.__giant={battle:startBattle,summon:()=>{parts.length=0;arrive()},chase:k=>startChase(k),
   state:()=>({task:task&&task.k,st:task&&task.st,kind:task&&task.kind,act:ACTS[story.act],bot:bot.state,view:bot.vf,toy:toy&&toy.mode,pieces:!!pieces})};
+window.__giant.sound=sfxSet;
 
 /* tray icon: the giant's head */
 function makeIcon(){
@@ -1209,6 +1494,7 @@ function frame(now){
   if(!paused){if(!pieces)weapons(dt,battleOn);updateDrones(dt);updateBullets(dt);if(pieces)updatePieces(dt);stepParts(dt,G)}
   if(!paused)fxUpdate(dt);
   if(!paused){updateStory(dt);storyWatch()}
+  sfxFrame(dt,flame);
   hitTest(pieces?-1e5:x,y);
 
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);ctx.globalCompositeOperation='source-over';
