@@ -9,4 +9,6 @@ contextBridge.exposeInMainWorld('giant', {
   onBattle: (cb) => ipcRenderer.on('battle', () => cb()),
   onChase: (cb) => ipcRenderer.on('chase', () => cb()),
   onBoy: (cb) => ipcRenderer.on('boy', () => cb()),
+  // данные о ПК: {windows, cursor, idle, fullscreenApp}, приходят частями
+  onPC: (cb) => ipcRenderer.on('pc', (_e, p) => cb(p)),
 });

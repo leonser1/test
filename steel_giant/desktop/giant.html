@@ -21,6 +21,49 @@ const smooth=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const rand=(a,b)=>a+Math.random()*(b-a);
 const api=window.giant||null;
+/* ---------- pc bridge: real windows, cursor, idle, time ---------- */
+// window.PC: real PC data from Electron main (windows, cursor, idle), or a browser fallback/sim.
+// Everything lives in a block so no local names leak into the renderer scope.
+{
+  const now=()=>performance.now();
+  const P=window.PC={windows:[],cursor:{x:-1e4,y:-1e4,t:0,down:false},idle:0,hour:new Date().getHours(),
+    active:true,fullscreenApp:false,source:'none'};
+  let lastInput=Date.now();
+  const fire=()=>{try{dispatchEvent(new Event('pcchange'))}catch(e){}};
+  const normWin=(a,mark)=>{
+    const out=[];if(!Array.isArray(a))return out;
+    for(let i=0;i<a.length;i++){const r=a[i];if(!r)continue;
+      const x=+r.x,y=+r.y,w=+(r.w!=null?r.w:r.width),h=+(r.h!=null?r.h:r.height);
+      if(!(isFinite(x)&&isFinite(y)&&w>0&&h>0))continue;
+      out.push({id:String(r.id!=null?r.id:'w'+i),x,y,w,h,
+        max:r.max!=null?!!r.max:(mark&&w>=innerWidth*0.9&&h>=innerHeight*0.85)});}
+    return out;
+  };
+  const setCursor=(x,y,down)=>{const c=P.cursor;c.x=+x;c.y=+y;c.t=now();if(down!=null)c.down=!!down};
+  const setIdle=s=>{s=Math.max(0,+s||0);P.idle=s;P.active=s<10;lastInput=Date.now()-s*1000};
+  window.__pc={
+    setWindows(arr){P.windows=normWin(arr,true);if(P.source!=='electron')P.source='sim';fire()},
+    setCursor(x,y){setCursor(x,y);fire()},
+    setIdle(sec){setIdle(sec);fire()},
+  };
+  const input=()=>{if(P.source!=='electron'){lastInput=Date.now();if(P.idle){P.idle=0;P.active=true}}};
+  addEventListener('mousemove',e=>{setCursor(e.clientX,e.clientY,(e.buttons&1)===1);input()},{passive:true});
+  addEventListener('mousedown',e=>{if(e.button===0)P.cursor.down=true;input()},{passive:true});
+  addEventListener('mouseup',e=>{if(e.button===0)P.cursor.down=false},{passive:true});
+  addEventListener('keydown',input,{passive:true});
+  setInterval(()=>{
+    P.hour=new Date().getHours();
+    if(P.source!=='electron'){P.idle=Math.max(0,(Date.now()-lastInput)/1000);P.active=P.idle<10}
+  },1000);
+  if(api&&api.onPC)api.onPC(p=>{
+    if(!p)return;P.source='electron';
+    if(p.windows)P.windows=normWin(p.windows,false);
+    if(p.cursor)setCursor(p.cursor.x,p.cursor.y,!!p.cursor.down);
+    if(p.idle!=null){P.idle=Math.max(0,+p.idle||0);P.active=P.idle<10}
+    if(p.fullscreenApp!=null)P.fullscreenApp=!!p.fullscreenApp;
+    fire();
+  });
+}
 /* ---------- poses ---------- */
 function walkPose(p,amp,clock){
   const s=Math.sin(p),c=Math.cos(p),br=Math.sin(clock*1.6)*0.03*(1-amp);

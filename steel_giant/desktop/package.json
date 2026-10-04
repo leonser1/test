@@ -14,7 +14,7 @@
   "build": {
     "appId": "local.steelgiant.desktop",
     "productName": "SteelGiant",
-    "files": ["main.js", "preload.js", "giant.html"],
+    "files": ["main.js", "preload.js", "pcwatch.js", "giant.html"],
     "win": { "target": "portable" }
   }
 }
