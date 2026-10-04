@@ -1,0 +1,98 @@
+<title>Огненный дождь</title>
+<style>
+/* Layout: one full-screen canvas of falling embers; a small control strip pinned to the bottom */
+:root{
+  --night:#07060a; --glass:rgba(20,14,12,.62); --edge:rgba(255,190,120,.16); --ink:#f3e6d8; --muted:#b9a593; --hot:#ffb347;
+  --f-ui:system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--night);color:var(--ink);font:14px var(--f-ui)}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.panel{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:center;
+  background:var(--glass);border:1px solid var(--edge);border-radius:10px;padding:8px 14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);max-width:calc(100% - 32px);box-sizing:border-box}
+label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
+input[type=range]{width:110px;accent-color:var(--hot)}
+button{font:500 13px var(--f-ui);color:var(--ink);background:transparent;border:1px solid var(--edge);border-radius:7px;padding:6px 12px;cursor:pointer}
+button:hover{background:rgba(255,180,90,.12)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+.hint{color:var(--muted);font-size:12px}
+</style>
+
+<canvas id="sky" role="img" aria-label="Падающие горящие точки, как угольки после взрыва"></canvas>
+<div class="panel">
+  <label for="dens">Густота <input id="dens" type="range" min="0" max="100" value="35"></label>
+  <label for="wind">Ветер <input id="wind" type="range" min="-100" max="100" value="12"></label>
+  <label for="slow">Медленно <input id="slow" type="range" min="20" max="100" value="55"></label>
+  <button id="boom">Взрыв</button>
+  <button id="hide" aria-label="Скрыть панель">Скрыть панель</button>
+  <span class="hint">Клик по экрану — взрыв в этом месте</span>
+</div>
+
+<script>
+(()=>{
+const cv=document.getElementById('sky'),ctx=cv.getContext('2d');
+let W=0,H=0,dpr=1;
+function resize(){dpr=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+addEventListener('resize',resize);resize();
+
+/* glow sprite drawn once, tinted per ember by temperature */
+const SPR=(()=>{const s=document.createElement('canvas'),n=64;s.width=s.height=n;const c=s.getContext('2d'),g=c.createRadialGradient(n/2,n/2,0,n/2,n/2,n/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(0.18,'rgba(255,255,255,.85)');g.addColorStop(0.45,'rgba(255,255,255,.22)');g.addColorStop(1,'rgba(255,255,255,0)');
+  c.fillStyle=g;c.fillRect(0,0,n,n);return s})();
+/* temperature 1 → 0: white-yellow, orange, deep red, dark */
+const RAMP=[[1,[255,250,225]],[0.82,[255,214,120]],[0.6,[255,150,50]],[0.38,[235,80,25]],[0.18,[160,30,12]],[0,[60,10,6]]];
+function tint(t){for(let i=1;i<RAMP.length;i++){if(t>=RAMP[i][0]){const [t0,a]=RAMP[i-1],[t1,b]=RAMP[i],k=(t-t1)/(t0-t1);return[a[0]*k+b[0]*(1-k)|0,a[1]*k+b[1]*(1-k)|0,a[2]*k+b[2]*(1-k)|0]}}return RAMP[RAMP.length-1][1]}
+/* tinted sprites cached in 24 temperature steps */
+const TINTS=[];for(let i=0;i<=24;i++){const t=i/24,[r,g,b]=tint(t),s=document.createElement('canvas');s.width=s.height=64;const c=s.getContext('2d');
+  c.drawImage(SPR,0,0);c.globalCompositeOperation='source-in';c.fillStyle=`rgb(${r},${g},${b})`;c.fillRect(0,0,64,64);TINTS.push(s)}
+
+const embers=[];const MAX=2600;
+const el=id=>document.getElementById(id);
+let density=+el('dens').value,wind=+el('wind').value,slow=+el('slow').value;
+el('dens').oninput=e=>density=+e.target.value;el('wind').oninput=e=>wind=+e.target.value;el('slow').oninput=e=>slow=+e.target.value;
+
+function spawn(x,y,vx,vy,heat,size){if(embers.length>=MAX)embers.shift();
+  embers.push({x,y,vx,vy,t:heat,cool:0.07+Math.random()*0.1,r:size,ph:Math.random()*6.28,fl:5+Math.random()*9,sw:0.6+Math.random()*1.6,tr:[]})}
+function rainOne(){const r=Math.random();spawn(Math.random()*(W+200)-100,-10-Math.random()*40,(Math.random()-0.5)*20,20+Math.random()*40,0.55+Math.random()*0.35,0.7+r*r*1.6)}
+function burst(x,y,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=60+Math.random()*Math.random()*420;
+  spawn(x,y,Math.cos(a)*s,Math.sin(a)*s-60,0.85+Math.random()*0.15,0.7+Math.random()*1.5)}}
+
+el('boom').onclick=()=>burst(W*(0.2+Math.random()*0.6),H*(0.08+Math.random()*0.25),260);
+let hidden=false;const panel=document.querySelector('.panel');
+el('hide').onclick=()=>{hidden=true;panel.hidden=true};
+cv.addEventListener('pointerdown',e=>{if(hidden){hidden=false;panel.hidden=false;return}burst(e.clientX,e.clientY,220)});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&hidden){hidden=false;panel.hidden=false}});
+
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let acc=0,last=performance.now(),autoBurst=3;
+burst(W*0.5,H*0.18,320);
+function frame(now){
+  let dt=Math.min(0.05,(now-last)/1000);last=now;
+  const tScale=(reduced?0.35:1)*(0.35+slow/100*0.65);dt*=tScale;
+  /* steady rain from the top + an occasional distant burst */
+  acc+=dt*density*1.6;while(acc>1){acc--;rainOne()}
+  autoBurst-=dt;if(autoBurst<=0){autoBurst=6+Math.random()*8;burst(W*(0.1+Math.random()*0.8),H*(0.05+Math.random()*0.2),120+Math.random()*180)}
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.globalCompositeOperation='source-over';ctx.fillStyle='rgba(7,6,10,0.35)';ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  const wx=wind*0.9;
+  for(let i=embers.length-1;i>=0;i--){const p=embers[i];
+    p.ph+=dt*p.sw*2;
+    const drag=Math.min(1,dt*(0.9+1.4/p.r));
+    p.vx+=(wx+Math.sin(p.ph)*18*p.sw-p.vx)*drag;
+    p.vy+=(55+28*p.r-p.vy)*drag*0.6+40*dt;
+    p.x+=p.vx*dt;p.y+=p.vy*dt;
+    p.t-=p.cool*dt*(1.2-p.r*0.12);
+    if(p.t<=0||p.y>H+20||p.x<-150||p.x>W+150){embers.splice(i,1);continue}
+    const flick=0.75+0.25*Math.sin(now*0.001*p.fl+p.ph),a=Math.min(1,p.t*1.6)*flick;
+    const s=TINTS[Math.max(0,Math.min(24,Math.round(p.t*24)))],sz=p.r*(2.2+1.6*p.t);
+    ctx.globalAlpha=a*0.55;ctx.drawImage(s,p.x-sz,p.y-sz,sz*2,sz*2);
+    const c=p.r*0.9;ctx.globalAlpha=a;ctx.drawImage(TINTS[Math.max(0,Math.min(24,Math.round(p.t*24+3)))],p.x-c,p.y-c,c*2,c*2);
+  }
+  ctx.globalAlpha=1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
