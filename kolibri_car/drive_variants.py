@@ -169,11 +169,23 @@ def frame(motor_x, right_y0, rod_through_left=True, slots=0.0, extra_left=None, 
     return f - union(cuts)
 
 
-def hub(y0, y1, r=8.0):
-    """Ступица на палку Ø10 с поперечным винтом M3 (стопор)."""
+def hub(y0, y1, r=10.0):
+    """Ступица на палку Ø10: 2 стопорных винта M3 под 90° (на лыску палки),
+    гайки M3 вставляются в пазы с торца ступицы."""
     h = cyl_y(r, y0, y1, 0, ROD_Z) - cyl_y(ROD_R + 0.15, y0 - 1, y1 + 1, 0, ROD_Z)
     ym = (y0 + y1) / 2
-    return h - M.cylinder(2 * r + 2, 1.4, 1.4, 16).translate([0, 0, -r - 1]).translate([0, ym, ROD_Z])
+    cuts = []
+    for ang in (90, 0):          # сверху и сбоку
+        a = math.radians(ang)
+        ux, uz = math.cos(a), math.sin(a)
+        screw = M.cylinder(r + 1, 1.6, 1.6, 16).rotate([0, 90, 0]).rotate([0, -ang, 0]).translate([0, ym, ROD_Z])
+        rn = ROD_R + 2.3     # гайка между палкой и наружной стенкой ступицы
+        nut = (hex_prism(5.8, -1.3, 1.3).rotate([0, 90, 0]).rotate([0, -ang, 0])
+               .translate([rn * ux, ym, ROD_Z + rn * uz]))
+        slot = box(-2.9, 2.9, ym, y1 + 1, -1.3, 1.3).rotate([0, 90, 0]).rotate([0, -ang, 0]) \
+            .translate([rn * ux, 0, ROD_Z + rn * uz])
+        cuts += [screw, nut, slot]
+    return h - union(cuts)
 
 
 def on_shaft(cs, y0, y1, x, spin=0.0, twist=0.0, nut=True):
