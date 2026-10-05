@@ -24,7 +24,7 @@ from generate_car import M, m3d, box, cyl_y, cyl_z, union, hex_prism, to_trimesh
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- ПАРАМЕТРЫ (мм): замерить стойки! ----------------
-SO_S = 30.0             # между осями двух передних стоек
+SO_S = 33.0             # между осями двух передних стоек (замер пользователя)
 SO_D = 5.0              # диаметр стойки
 PLATE_GAP = 35.0        # между плитами (Mark4 10" V2)
 PLATE_T = 2.0
