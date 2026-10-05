@@ -67,12 +67,13 @@ REAR_TUBE_R = 24.0              # ступица между венцом и об
 
 # передний поворотный кулак
 KP_Y = 30.0                     # шкворень (ось поворота)
-KP_POST_R, KP_BORE_R, KP_SLEEVE_R = 4.0, 4.2, 7.5
+KP_POST_R, KP_BORE_R, KP_SLEEVE_R = 5.0, 5.1, 8.5   # стойка Ø10: Ø8 ломалась по слоям при посадке (аудит)
+FRONT_PAD_EXTRA = 2.0           # передняя поперечина толще палубы вниз (6 мм под кулаками)
 KP_TOP = 27.8                   # верх стойки шкворня
 SLEEVE_Z0, SLEEVE_Z1 = 0.5, 27.5
 ARM_L = 15.0                    # рычаг рулевой тяги
 ARM_Z0, ARM_Z1 = 23.5, 27.5
-ARM_HOLE_D = 2.2                # M2 болт + гайка (или шаровой наконечник M2)
+ARM_HOLE_D = 2.0                # M2 болт + гайка; рассверлить Ø2.0 по месту — меньше люфт
 AXLE_BOSS_HALF = 7.5           # полудиагональ ромба оси: вершина = верх гильзы (стол при печати)
 BEARING_D, BEARING_W = 16.1, 5.0   # 625ZZ (5×16×5), 2 шт на колесо
 BRG_GAP = 2.0                   # между подшипниками: проставка 5.3/8 × 2 мм на внутренние кольца
@@ -83,11 +84,11 @@ SERVO_L, SERVO_W = 23.2, 12.9
 SERVO_SHAFT_OFF = 5.5
 SERVO_SCREW_SPACING = 27.8
 SERVO_TAB_Z = 15.5              # верх опор под ушки (сервопривод стоит на палубе)
-HORN_L = 13.0                   # рабочее отверстие качалки от вала (паз тяги берёт 11–14)
+HORN_L = 11.0                   # рабочее отверстие качалки от вала (паз тяги берёт 10–13): меньше момент и люфт
 HORN_Z = 28.0                   # верх качалки над палубой
-SERVO_TRAVEL = 30.0             # ход качалки ± (конечные точки серво): колёса ≈ 30°/25°
+SERVO_TRAVEL = 36.0             # ход качалки ± (конечные точки серво, ≈1100–1900 мкс): колёса ≈ 30°/25°
 BAR_Z0 = 36.0                   # низ поперечной тяги: качалка с гайкой пальца до 34 мм (MG90S корпус 28.5)
-BAR_T = 3.0
+BAR_T = 4.0                     # толще: тяга работает на сжатие
 
 # стек второго полётника
 STACK_30 = 30.5
@@ -102,7 +103,8 @@ ARM_END = (FRONT_X + ARM_L * ARM_DIR[0], KP_Y + ARM_L * ARM_DIR[1])
 SERVO_SHAFT_X = ARM_END[0] + HORN_L
 BAR_L = 2 * ARM_END[1]                    # поперечная тяга: между отверстиями рычагов
 PIN_X0 = SERVO_SHAFT_X - HORN_L            # палец качалки при прямых колёсах
-SLOT_X = (SERVO_SHAFT_X - 15.0 - 0.5, SERVO_SHAFT_X - 11.0 + 13.0 * (1 - math.cos(math.radians(45))) + 0.5)
+SLOT_X = (SERVO_SHAFT_X - (HORN_L + 2) - 0.5, SERVO_SHAFT_X - (HORN_L - 1) + (HORN_L + 2) * (1 - math.cos(math.radians(45))) + 0.5)
+SLOT_R = 1.05                   # паз под палец M2 (Ø2.1, довести надфилем)
 WHEEL_IN_Y = WHEEL_OUT_Y - WHEEL_W
 
 GEAR_RATIO = WHEEL_GEAR_Z / PINION_Z
@@ -187,8 +189,9 @@ def make_deck():
     body = [spine]
 
     # передняя поперечина со стойками шкворней
-    pads = [cyl_z(8.5, z0, 0, FRONT_X, s * KP_Y) for s in (-1, 1)]
-    body.append(M.batch_hull([box(FRONT_X - 8.5, FRONT_X + 8.5, -20, 20, z0, 0)] + pads))
+    zp = z0 - FRONT_PAD_EXTRA
+    pads = [cyl_z(KP_SLEEVE_R + 0.5, zp, 0, FRONT_X, s * KP_Y) for s in (-1, 1)]
+    body.append(M.batch_hull([box(FRONT_X - 8.5, FRONT_X + 8.5, -20, 20, zp, 0)] + pads))
     for s in (-1, 1):
         body.append(cyl_z(KP_POST_R, 0, KP_TOP, FRONT_X, s * KP_Y))
 
@@ -246,8 +249,8 @@ def make_deck():
         cuts.append(hex_prism(5.8, z0 - 1, z0 + 2.5, x, y))
     # шкворни M3 насквозь, гайка сверху; снизу утопленная головка
     for s in (-1, 1):
-        cuts.append(cyl_z(1.65, z0 - 1, KP_TOP + 1, FRONT_X, s * KP_Y, 24))
-        cuts.append(cyl_z(3.0, z0 - 1, z0 + 2.0, FRONT_X, s * KP_Y, 32))
+        cuts.append(cyl_z(1.65, z0 - FRONT_PAD_EXTRA - 1, KP_TOP + 1, FRONT_X, s * KP_Y, 24))
+        cuts.append(cyl_z(3.0, z0 - FRONT_PAD_EXTRA - 1, z0 - FRONT_PAD_EXTRA + 2.0, FRONT_X, s * KP_Y, 32))
     # серво: пилоты M2
     for sx in (s_cx - SERVO_SCREW_SPACING / 2, s_cx + SERVO_SCREW_SPACING / 2):
         cuts.append(cyl_z(0.9, 4, SERVO_TAB_Z + 1, sx, 0, 16))
@@ -379,14 +382,15 @@ def make_knuckle():
     diamond = diamond ^ box(x - d, x + d, y, boss_y1, SLEEVE_Z0, AXLE_Z + d)
     # диамант оси срастается с гильзой через ребро
     web = box(x - 3, x + 3, y, y + KP_SLEEVE_R + 3, SLEEVE_Z0, SLEEVE_Z1)
-    tip = cyl_y(4.0, boss_y1 - 0.01, boss_y1 + 0.8, x, AXLE_Z, 32)   # шайба-упор на внутреннее кольцо
+    tip = cyl_y(3.5, boss_y1 - 0.01, boss_y1 + 0.8, x, AXLE_Z, 32)   # шайба-упор Ø7 только на внутреннее кольцо
     part = union([sleeve, arm, diamond, web, tip])
 
     cuts = [cyl_z(KP_BORE_R, SLEEVE_Z0 - 1, SLEEVE_Z1 + 1, x, y)]
     # M5 ось, отверстие-капля (острием вниз: печать вверх ногами)
-    ax = M.batch_hull([cyl_y(2.65, y + KP_BORE_R + 1.2, boss_y1 + 2, x, AXLE_Z, 32),
-                       box(x - 0.3, x + 0.3, y + KP_BORE_R + 1.2, boss_y1 + 2, AXLE_Z - 3.7, AXLE_Z - 3.1)])
-    cuts.append(ax)
+    # острие капли только внутри ромба: на шайбе-упоре не остаётся перемычки 0.3 мм
+    ax = M.batch_hull([cyl_y(2.65, y + KP_BORE_R + 1.2, boss_y1 - 0.5, x, AXLE_Z, 32),
+                       box(x - 0.3, x + 0.3, y + KP_BORE_R + 1.2, boss_y1 - 0.5, AXLE_Z - 3.7, AXLE_Z - 3.1)])
+    cuts += [ax, cyl_y(2.65, y + KP_BORE_R + 1.2, boss_y1 + 2, x, AXLE_Z, 32)]
     ny0 = boss_y1 - 9.0
     cuts.append(box(x - 4.15, x + 4.15, ny0, ny0 + 4.3, AXLE_Z - 4.8, AXLE_Z + d + 1))
     cuts.append(cyl_z(ARM_HOLE_D / 2, ARM_Z0 - 1, ARM_Z1 + 1, ex, ey, 16))
@@ -451,14 +455,15 @@ def make_tie_bar():
     повороте качалки и разную длину качалки (11–14 мм)."""
     ex, ey = ARM_END
     z0, z1 = BAR_Z0, BAR_Z0 + BAR_T
-    beam = M.batch_hull([cyl_z(3.8, z0, z1, ex, ey), cyl_z(3.8, z0, z1, ex, -ey)])
+    beam = M.batch_hull([cyl_z(3.0, z0, z1, ex, ey), cyl_z(3.0, z0, z1, ex, -ey)])   # уже: дальше от стоек рамы
+    beam = union([beam, cyl_z(3.8, z0, z1, ex, ey), cyl_z(3.8, z0, z1, ex, -ey)])
     pad = M.batch_hull([cyl_z(3.6, z0, z1, SLOT_X[0], 0), cyl_z(3.6, z0, z1, SLOT_X[1], 0)])
     # бобышки-проставки вниз до рычагов
     bosses = [cyl_z(3.8, ARM_Z1 + 0.3, z0 + 0.01, ex, sy * ey) for sy in (-1, 1)]
     bar = union([beam, pad] + bosses)
     cuts = [cyl_z(ARM_HOLE_D / 2, ARM_Z1 - 1, z1 + 1, ex, sy * ey, 16) for sy in (-1, 1)]
-    cuts.append(M.batch_hull([cyl_z(1.2, z0 - 1, z1 + 1, SLOT_X[0], 0, 16),
-                              cyl_z(1.2, z0 - 1, z1 + 1, SLOT_X[1], 0, 16)]))
+    cuts.append(M.batch_hull([cyl_z(SLOT_R, z0 - 1, z1 + 1, SLOT_X[0], 0, 16),
+                              cyl_z(SLOT_R, z0 - 1, z1 + 1, SLOT_X[1], 0, 16)]))
     return bar - union(cuts)
 
 
@@ -603,7 +608,7 @@ def steering_check(deck, kn, fw):
     front = union([kn, place_wheel(fw, FRONT_X)])
     wb, tw = FRONT_X - REAR_X, 2 * KP_Y
     print("  качалка  колесо Л  колесо П  идеал внутр.  палец в пазу X   касания")
-    for phi in (-SERVO_TRAVEL - 5, -SERVO_TRAVEL, -20, -10, 0, 10, 20, SERVO_TRAVEL, SERVO_TRAVEL + 5):
+    for phi in (-SERVO_TRAVEL - 3, -SERVO_TRAVEL, -20, -10, 0, 10, 20, SERVO_TRAVEL, SERVO_TRAVEL + 3):
         d = delta_for_servo(phi)
         st = steer_state(d)
         outer, inner = sorted((abs(st["dl"]), abs(st["dr"])))
