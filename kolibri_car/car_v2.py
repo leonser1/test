@@ -80,7 +80,7 @@ def rear_frame(v):
         parts.append(cyl_y(6, v["idler_y1"] + DY + 0.8, yB0 + 0.01, ix, Z))
     f = union(parts)
     cuts = []
-    # мотор на стенке A: 16×19 M3 + центр
+    # мотор на стенке A: 4 × M3 по диагонали Ø19 (квадрат 13.4) + центр
     sl = MOTOR_SLOT
     cuts.append(M.batch_hull([cyl_y(6.0, yA0 - 1, yA1 + 1, mx - sl, Z), cyl_y(6.0, yA0 - 1, yA1 + 1, mx + sl, Z)]))
     for dx, dz in dv.MOTOR_HOLES:
