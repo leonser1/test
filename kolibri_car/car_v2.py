@@ -219,6 +219,19 @@ def check(v):
             if (body ^ m2).volume() > 0.5:
                 print(f"  {name} задевает привод"); ok = False
     print(f"Задний мост: касаний {'нет' if ok else 'ЕСТЬ'}")
+    # дрон (плита, лучи, моторы, диски винтов) против всей машины на всём ходу руля
+    drone = gc.drone_proxy()
+    dmin = 1e9
+    for ph in (-gc.SERVO_TRAVEL - 3, 0, gc.SERVO_TRAVEL + 3):
+        a = assembly(v, servo=ph)
+        vol = (a ^ drone).volume()
+        # зазор считаем без рамы: её стойки упираются в плиту дрона по замыслу
+        moving_parts = a - make_deck_v2(v)
+        dmin = min(dmin, moving_parts.min_gap(drone, 30))
+        if vol > 0.5:
+            print(f"  дрон задевает машину при качалке {ph:+.0f}°: {vol:.0f} мм³"); ok = False
+    print(f"Дрон: касаний нет; от колёс, мотора и тяги до плиты/лучей минимум {dmin:.1f} мм")
+    ok &= dmin > 2.0
     ground = Z - gc.TIRE_R
     low = min(deck.bounding_box()[2], min(p.bounding_box()[2] for p in moving))
     print(f"Земля Z={ground:.0f}; самая низкая точка рамы/передачи Z={low:.1f} -> клиренс {low - ground:.1f} мм")
@@ -276,7 +289,7 @@ def render(v, path):
 
 def export(v):
     out = os.path.join(HERE, "stl", "v2")
-    os.makedirs(out, exist_ok=True)
+    os.makedirs(os.path.join(out, "toe"), exist_ok=True)
     kn = gc.make_knuckle()
     parts = {
         "v2_frame_x1.stl": on_bed(make_deck_v2(v)),
@@ -287,6 +300,8 @@ def export(v):
         "v2_knuckle_L_x1.stl": on_bed(kn.rotate([180, 0, 0])),
         "v2_knuckle_R_x1.stl": on_bed(mirror_y(kn).rotate([180, 0, 0])),
         "v2_tie_bar_x1.stl": on_bed(gc.make_tie_bar().rotate([180, 0, 0])),
+        "toe/v2_tie_bar_minus0.4_toe_out_x1.stl": on_bed(gc.make_tie_bar(-0.4).rotate([180, 0, 0])),
+        "toe/v2_tie_bar_plus0.4_toe_in_x1.stl": on_bed(gc.make_tie_bar(0.4).rotate([180, 0, 0])),
         "v2_adapter_B_optional_x1.stl": on_bed(gc.make_adapter_b()),
     }
     for name, p, col, n in v["parts"]:

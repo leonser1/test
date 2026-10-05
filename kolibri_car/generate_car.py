@@ -33,9 +33,9 @@ PROP_R = 127.0
 
 MOUNT_L, MOUNT_S = 52.6, 37.0   # болты нижней плиты (замер). Палуба: 52.6 вдоль X (вперёд)
 ADAPTER_T = 5.0                 # переходник, если у рамы 52.6 идёт поперёк (вариант B)
-TOWER_H = 42.0                  # от верха палубы до низа нижней плиты дрона
+TOWER_H = 58.0                  # от верха палубы до низа нижней плиты дрона: лучи (плита+3) выше шин на 6 мм
 TOWER_R = 5.0
-DECK_T = 4.0
+DECK_T = 6.0                    # палуба 6 мм: запас под шкворнями при посадке (аудит); дно ровное для печати
 
 AXLE_Z = 20.0                   # высота осей над палубой
 REAR_X, FRONT_X = -50.0, 50.0   # колёсная база 100: всё вне дисков винтов
@@ -68,9 +68,9 @@ REAR_TUBE_R = 24.0              # ступица между венцом и об
 # передний поворотный кулак
 KP_Y = 30.0                     # шкворень (ось поворота)
 KP_POST_R, KP_BORE_R, KP_SLEEVE_R = 5.0, 5.1, 8.5   # стойка Ø10: Ø8 ломалась по слоям при посадке (аудит)
-FRONT_PAD_EXTRA = 2.0           # передняя поперечина толще палубы вниз (6 мм под кулаками)
+FRONT_PAD_EXTRA = 0.0           # (было утолщение вниз — давало ступеньку на дне; теперь вся палуба 6 мм)
 KP_TOP = 27.8                   # верх стойки шкворня
-SLEEVE_Z0, SLEEVE_Z1 = 0.5, 27.5
+SLEEVE_Z0, SLEEVE_Z1 = 0.2, 27.6   # осевой люфт кулака 0.4 мм
 ARM_L = 15.0                    # рычаг рулевой тяги
 ARM_Z0, ARM_Z1 = 23.5, 27.5
 ARM_HOLE_D = 2.0                # M2 болт + гайка; рассверлить Ø2.0 по месту — меньше люфт
@@ -78,6 +78,7 @@ AXLE_BOSS_HALF = 7.5           # полудиагональ ромба оси: �
 BEARING_D, BEARING_W = 16.1, 5.0   # 625ZZ (5×16×5), 2 шт на колесо
 BRG_GAP = 2.0                   # между подшипниками: проставка 5.3/8 × 2 мм на внутренние кольца
 STEER_MAX = 30.0                # требуемый угол поворота колёс
+STEER_STOP = 33.0               # механический упор кулака (шина касается стойки на ~36°)
 
 # серво руля MG90S / SG90
 SERVO_L, SERVO_W = 23.2, 12.9
@@ -96,7 +97,8 @@ STACK_20 = 20.0
 # -----------------------------------------------------------------------------
 
 # геометрия рулевой трапеции (Аккерман: рычаг смотрит на центр задней оси)
-_dx, _dy = REAR_X - FRONT_X, -KP_Y
+ACKERMANN_X = -60.0             # рычаги смотрят на заднюю ось v2 (база 110)
+_dx, _dy = ACKERMANN_X - FRONT_X, -KP_Y
 _n = math.hypot(_dx, _dy)
 ARM_DIR = (_dx / _n, _dy / _n)
 ARM_END = (FRONT_X + ARM_L * ARM_DIR[0], KP_Y + ARM_L * ARM_DIR[1])
@@ -190,10 +192,25 @@ def make_deck():
 
     # передняя поперечина со стойками шкворней
     zp = z0 - FRONT_PAD_EXTRA
-    pads = [cyl_z(KP_SLEEVE_R + 0.5, zp, 0, FRONT_X, s * KP_Y) for s in (-1, 1)]
-    body.append(M.batch_hull([box(FRONT_X - 8.5, FRONT_X + 8.5, -20, 20, zp, 0)] + pads))
+    pads = [cyl_z(KP_SLEEVE_R + 0.5, z0, 0, FRONT_X, s * KP_Y) for s in (-1, 1)]
+    body.append(M.batch_hull([box(FRONT_X - 8.5, FRONT_X + 8.5, -20, 20, z0, 0)] + pads))
+    # нижний слой утолщения уже (r 6 под шкворнем), чтобы не цеплять шину на полном повороте
+    if FRONT_PAD_EXTRA > 0:
+        low = [cyl_z(6.0, zp, z0 + 0.01, FRONT_X, s * KP_Y) for s in (-1, 1)]
+        body.append(M.batch_hull([box(FRONT_X - 7.0, FRONT_X + 7.0, -20, 20, zp, z0 + 0.01)] + low))
     for s in (-1, 1):
         body.append(cyl_z(KP_POST_R, 0, KP_TOP, FRONT_X, s * KP_Y))
+        # упоры поворота: ребро кулака (±3 мм, наружу к колесу) встаёт в зуб на ±STEER_STOP
+        for sign in (-1, 1):
+            a0 = 90 + sign * (STEER_STOP + 19.0)
+            a1 = 90 + sign * (STEER_STOP + 40)
+            pts = [[0, 0]] + [[13 * math.cos(math.radians(a0 + (a1 - a0) * i / 8)),
+                               13 * math.sin(math.radians(a0 + (a1 - a0) * i / 8))] for i in range(9)]
+            # зуб только над площадкой (z 0..3): ниже он цеплял бы шину на полном повороте
+            wedge = M.extrude(m3d.CrossSection([pts if sign > 0 else pts[::-1]]), 3.2).translate([0, 0, -0.2])
+            tooth = (wedge ^ (cyl_z(11.0, -0.2, 3.0) - cyl_z(KP_SLEEVE_R + 0.4, -1, 4.0)))
+            tooth = tooth.translate([FRONT_X, KP_Y, 0])
+            body.append(tooth if s > 0 else mirror_y(tooth))
 
     # площадка под серво
     s_cx = SERVO_SHAFT_X + SERVO_SHAFT_OFF
@@ -250,7 +267,7 @@ def make_deck():
     # шкворни M3 насквозь, гайка сверху; снизу утопленная головка
     for s in (-1, 1):
         cuts.append(cyl_z(1.65, z0 - FRONT_PAD_EXTRA - 1, KP_TOP + 1, FRONT_X, s * KP_Y, 24))
-        cuts.append(cyl_z(3.0, z0 - FRONT_PAD_EXTRA - 1, z0 - FRONT_PAD_EXTRA + 2.0, FRONT_X, s * KP_Y, 32))
+        cuts.append(cyl_z(3.0, z0 - FRONT_PAD_EXTRA - 1, z0 - FRONT_PAD_EXTRA + 3.0, FRONT_X, s * KP_Y, 32))   # головка M3 DIN 912 заподлицо
     # серво: пилоты M2
     for sx in (s_cx - SERVO_SCREW_SPACING / 2, s_cx + SERVO_SCREW_SPACING / 2):
         cuts.append(cyl_z(0.9, 4, SERVO_TAB_Z + 1, sx, 0, 16))
@@ -448,12 +465,13 @@ def place_wheel(man, x, side=1):
     return m if side > 0 else mirror_y(m)
 
 
-def make_tie_bar():
+def make_tie_bar(dl=0.0):
     """Поперечная рулевая тяга (в координатах машины, колёса прямо).
     Концы — на рычаги кулаков (M2 + гайка). В середине паз вдоль X: в него входит
     палец качалки серво (винт M2). Паз сам выбирает смещение пальца по X при
     повороте качалки и разную длину качалки (11–14 мм)."""
     ex, ey = ARM_END
+    ey += dl / 2            # dl ≠ 0: тяга длиннее/короче — регулировка схождения (±0.4 мм ≈ ±0.8° на колесо)
     z0, z1 = BAR_Z0, BAR_Z0 + BAR_T
     beam = M.batch_hull([cyl_z(3.0, z0, z1, ex, ey), cyl_z(3.0, z0, z1, ex, -ey)])   # уже: дальше от стоек рамы
     beam = union([beam, cyl_z(3.8, z0, z1, ex, ey), cyl_z(3.8, z0, z1, ex, -ey)])
@@ -606,7 +624,7 @@ def steering_check(deck, kn, fw):
     bar = make_tie_bar()
     env = union([deck, servo_body_proxy(), stack_proxy()])
     front = union([kn, place_wheel(fw, FRONT_X)])
-    wb, tw = FRONT_X - REAR_X, 2 * KP_Y
+    wb, tw = FRONT_X - ACKERMANN_X, 2 * KP_Y
     print("  качалка  колесо Л  колесо П  идеал внутр.  палец в пазу X   касания")
     for phi in (-SERVO_TRAVEL - 3, -SERVO_TRAVEL, -20, -10, 0, 10, 20, SERVO_TRAVEL, SERVO_TRAVEL + 3):
         d = delta_for_servo(phi)
@@ -615,7 +633,7 @@ def steering_check(deck, kn, fw):
         ideal = math.degrees(math.atan(1 / (1 / math.tan(math.radians(outer)) - tw / wb))) if outer > 0.5 else 0
         b = place_bar(bar, st)
         k = union([place_knuckle_state(front, st["dl"], 1), place_knuckle_state(front, st["dr"], -1)])
-        hit = (b ^ env).volume() + (b ^ k).volume() * 0 + (k ^ env).volume() + (horn_proxy(st["phi"]) ^ b).volume()
+        hit = (b ^ env).volume() + (b ^ k).volume() + (k ^ env).volume() + (horn_proxy(st["phi"]) ^ b).volume()
         in_slot = SLOT_X[0] + 1.2 <= st["slot"] <= SLOT_X[1] - 1.2
         # тяга не должна касаться кулаков кроме своих бобышек: проверяем без рычагов
         wheels_hit = (b ^ union([place_knuckle_state(place_wheel(fw, FRONT_X), st["dl"], 1),
