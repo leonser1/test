@@ -10,6 +10,7 @@ from xml.sax.saxutils import escape
 
 import numpy as np
 import trimesh
+import manifold3d as m3d
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "stl", "v2")
@@ -97,8 +98,150 @@ def read_back(path):
     return vol, inside
 
 
+# ---------------------------------------------------------------- всё на один стол
+ONE_PLATE = [  # (файл, кол-во, материал)
+    ("v2_frame_x1.stl", 1, "PETG"), ("v2_front_rim_625_x2.stl", 2, "PETG"),
+    ("v2_rear_wheel_rod10_x2.stl", 2, "PETG"), ("v2_V4_gear_48T_x1.stl", 1, "PA-CF"),
+    ("v2_tie_bar_x1.stl", 1, "PA-CF"), ("toe/v2_tie_bar_minus0.4_toe_out_x1.stl", 1, "PA-CF"),
+    ("toe/v2_tie_bar_plus0.4_toe_in_x1.stl", 1, "PA-CF"), ("v2_tire_TPU_x4.stl", 4, "TPU"),
+]
+# мелочь кладётся в отверстия шин (Ø49.6): (файл, материал, номер шины, смещение от центра)
+NESTED = [("v2_knuckle_L_x1.stl", "PA-CF", 0, (0, 0)), ("v2_knuckle_R_x1.stl", "PA-CF", 1, (0, 0)),
+          ("v2_V4_pinion_12T_x1.stl", "PA-CF", 2, (0, 0)),
+          ("v2_bearing_spacer_x2.stl", "PETG", 3, (-9, 0)), ("v2_bearing_spacer_x2.stl", "PETG", 3, (9, 0))]
+PGAP = 3.0
+
+
+def _round(m):
+    """Круглая деталь? (габарит XY почти квадрат и площадь проекции ≈ круга)."""
+    w, h = m.extents[:2]
+    return abs(w - h) < 0.5 and w > 30
+
+
+def _fits(shape, x, y, placed, bed):
+    kind, a, b = shape
+    if kind == "c":
+        r = a
+        if x - r < PGAP or y - r < PGAP or x + r > bed - PGAP or y + r > bed - PGAP:
+            return False
+    else:
+        w, h = a, b
+        if x < PGAP or y < PGAP or x + w > bed - PGAP or y + h > bed - PGAP:
+            return False
+    for (k2, a2, b2), (x2, y2) in placed:
+        if kind == "c" and k2 == "c":
+            if (x - x2) ** 2 + (y - y2) ** 2 < (a + a2 + PGAP) ** 2:
+                return False
+        elif kind == "r" and k2 == "r":
+            if x < x2 + a2 + PGAP and x2 < x + a + PGAP and y < y2 + b2 + PGAP and y2 < y + b + PGAP:
+                return False
+        else:
+            (cx, cy, r), (rx, ry, rw, rh) = ((x, y, a), (x2, y2, a2, b2)) if kind == "c" else ((x2, y2, a2), (x, y, a, b))
+            dx = max(rx - cx, 0, cx - (rx + rw)); dy = max(ry - cy, 0, cy - (ry + rh))
+            if dx * dx + dy * dy < (r + PGAP) ** 2:
+                return False
+    return True
+
+
+def pack_one(shapes, bed, step=1.0):
+    """Жадная раскладка «ниже-левее»: круги как круги, остальное прямоугольники (с поворотом 90°)."""
+    order = sorted(range(len(shapes)), key=lambda i: -(shapes[i][1] ** 2 * 3.14 if shapes[i][0] == "c"
+                                                       else shapes[i][1] * shapes[i][2]))
+    placed, res = [], [None] * len(shapes)
+    grid = np.arange(0, bed + step, step)
+    for i in order:
+        kind, a, b = shapes[i]
+        variants = [(shapes[i], False)] + ([(("r", b, a), True)] if kind == "r" else [])
+        best = None
+        for shp, rot in variants:
+            for y in grid:
+                if best and y > best[1]:
+                    break
+                for x in grid:
+                    if _fits(shp, x, y, placed, bed):
+                        if not best or (y, x) < (best[1], best[0]):
+                            best = (x, y, shp, rot)
+                        break
+        if not best:
+            return None
+        placed.append((best[2], (best[0], best[1])))
+        res[i] = best
+    return res
+
+
+def _proj(m):
+    """Контур детали на столе (CrossSection) с припуском PGAP/2."""
+    mm = m3d.Manifold(m3d.Mesh(vert_properties=np.asarray(m.vertices, np.float32),
+                               tri_verts=np.asarray(m.faces, np.uint32)))
+    return mm.project().offset(PGAP / 2, m3d.JoinType.Round)
+
+
+def pack_true(meshes, bed, step=2.0):
+    """«Ниже-левее» по реальным контурам: мелочь сама попадает в отверстия шин и карманы рамы."""
+    order = sorted(range(len(meshes)), key=lambda i: -meshes[i][1].area_projected if False else
+                   -np.prod(meshes[i][1].extents[:2]))
+    placed = None
+    res = [None] * len(meshes)
+    lim = bed - PGAP / 2
+    for i in order:
+        name, m = meshes[i]
+        best = None
+        for rot in (0, 90):
+            mm = m.copy()
+            if rot:
+                mm.apply_transform(trimesh.transformations.rotation_matrix(np.pi / 2, [0, 0, 1]))
+            mm.apply_translation(-mm.bounds[0])
+            pr = _proj(mm)
+            (bx0, by0), (bx1, by1) = pr.bounds()[:2], pr.bounds()[2:]
+            w, h = bx1 - bx0, by1 - by0
+            for y in np.arange(PGAP / 2, lim - h + 1e-6, step):
+                if best and y > best[1]:
+                    break
+                for x in np.arange(PGAP / 2, lim - w + 1e-6, step):
+                    cand = pr.translate([x - bx0, y - by0])
+                    if placed is None or (cand ^ placed).area() < 1e-3:
+                        if not best or (y, x) < (best[1], best[0]):
+                            best = (x - bx0, y - by0, mm, cand)
+                        break
+        if not best:
+            return None
+        placed = best[3] if placed is None else placed + best[3]
+        res[i] = (name, best[2], (best[0], best[1]))
+    return res
+
+
+def one_plate():
+    meshes = []
+    for fn, n, mat in ONE_PLATE + [(f, 1, mt) for f, mt, _, _ in NESTED]:
+        m = trimesh.load(os.path.join(SRC, fn))
+        m.apply_translation(-m.bounds[0])
+        base = os.path.basename(fn).replace(".stl", "").replace("v2_", "")
+        for k in range(n):
+            meshes.append((f"{mat}_{base}_{k + 1}" if n > 1 else f"{mat}_{base}", m))
+    # одинаковые имена (2 проставки из NESTED) — пронумеровать
+    seen = {}
+    for i, (nm, m) in enumerate(meshes):
+        seen[nm] = seen.get(nm, 0) + 1
+        if seen[nm] > 1:
+            meshes[i] = (f"{nm}_{seen[nm]}", m)
+    for bed in (220.0, 235.0, 250.0, 256.0):
+        res = pack_true(meshes, bed)
+        print(f"  стол {bed:.0f}: {'влезло' if res else 'не влезло'}")
+        if res:
+            return res, bed
+    raise RuntimeError("не влезает даже на 256")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    items, bed = one_plate()
+    global BED
+    keep, BED = BED, bed
+    path = os.path.join(OUT, f"Kolibri_v2_ALL_one_plate_{bed:.0f}.3mf")
+    write_3mf(path, items)
+    vol, inside = read_back(path)
+    print(f"ВСЁ НА ОДНОМ СТОЛЕ {bed:.0f}×{bed:.0f}: деталей {len(items)}, объём {vol / 1000:.1f} см³, на столе: {'да' if inside else 'НЕТ'}")
+    BED = keep
     for plate, files in PLATES.items():
         meshes = []
         for fn, n in files:
