@@ -282,6 +282,7 @@ def export(v):
         "v2_frame_x1.stl": on_bed(make_deck_v2(v)),
         "v2_rear_wheel_rod10_x2.stl": on_bed(make_rear_wheel_rod()),
         "v2_front_rim_625_x2.stl": on_bed(gc.make_rim(True)),
+        "v2_bearing_spacer_x2.stl": on_bed(gc.make_bearing_spacer()),
         "v2_tire_TPU_x4.stl": on_bed(gc.make_tire()),
         "v2_knuckle_L_x1.stl": on_bed(kn.rotate([180, 0, 0])),
         "v2_knuckle_R_x1.stl": on_bed(mirror_y(kn).rotate([180, 0, 0])),

@@ -75,6 +75,7 @@ ARM_Z0, ARM_Z1 = 23.5, 27.5
 ARM_HOLE_D = 2.2                # M2 болт + гайка (или шаровой наконечник M2)
 AXLE_BOSS_HALF = 7.5           # полудиагональ ромба оси: вершина = верх гильзы (стол при печати)
 BEARING_D, BEARING_W = 16.1, 5.0   # 625ZZ (5×16×5), 2 шт на колесо
+BRG_GAP = 2.0                   # между подшипниками: проставка 5.3/8 × 2 мм на внутренние кольца
 STEER_MAX = 30.0                # требуемый угол поворота колёс
 
 # серво руля MG90S / SG90
@@ -85,7 +86,7 @@ SERVO_TAB_Z = 15.5              # верх опор под ушки (серво�
 HORN_L = 13.0                   # рабочее отверстие качалки от вала (паз тяги берёт 11–14)
 HORN_Z = 28.0                   # верх качалки над палубой
 SERVO_TRAVEL = 30.0             # ход качалки ± (конечные точки серво): колёса ≈ 30°/25°
-BAR_Z0 = 33.0                   # низ поперечной тяги: над качалкой с гайкой пальца запас ~3 мм на разброс серво
+BAR_Z0 = 36.0                   # низ поперечной тяги: качалка с гайкой пальца до 34 мм (MG90S корпус 28.5)
 BAR_T = 3.0
 
 # стек второго полётника
@@ -248,8 +249,9 @@ def make_deck():
         cuts.append(cyl_z(1.65, z0 - 1, KP_TOP + 1, FRONT_X, s * KP_Y, 24))
         cuts.append(cyl_z(3.0, z0 - 1, z0 + 2.0, FRONT_X, s * KP_Y, 32))
     # серво: пилоты M2
-    for sx in (s_x0 - 2.4, s_x1 + 2.4):
+    for sx in (s_cx - SERVO_SCREW_SPACING / 2, s_cx + SERVO_SCREW_SPACING / 2):
         cuts.append(cyl_z(0.9, 4, SERVO_TAB_Z + 1, sx, 0, 16))
+        cuts.append(box(sx - 3, sx + 3, -2.5, 2.5, -0.01, 4.5))     # проход кабеля серво под ушком
     # стойки: M3 сверху, гайка в боковом пазу
     for (x, y) in tps:
         cuts.append(cyl_z(1.65, TOWER_H - 14, TOWER_H + 1, x, y, 24))
@@ -369,7 +371,7 @@ def make_knuckle():
     ex, ey = ARM_END
     arm = M.batch_hull([cyl_z(6.0, ARM_Z0, ARM_Z1, x, y), cyl_z(3.8, ARM_Z0, ARM_Z1, ex, ey)])
     # торец-шайба упирается во внутреннее кольцо внутреннего подшипника
-    boss_y1 = WHEEL_OUT_Y - (2 * BEARING_W + 0.8) - 0.2 - 0.8
+    boss_y1 = WHEEL_OUT_Y - (2 * BEARING_W + BRG_GAP) - 0.2 - 0.8
     d = AXLE_BOSS_HALF
     diamond = (M.cube([2 * d / math.sqrt(2)] * 2 + [boss_y1 - y], True)
                .rotate([0, 0, 45]).rotate([-90, 0, 0])
@@ -407,14 +409,19 @@ def make_rim(front=True):
         cyl_z(FLANGE_R, WHEEL_W - 1.5, WHEEL_W),
     ])
     rim = rim - cyl_z(RIM_IN_R, HUB_T, WHEEL_W + 1)
-    rim = union([rim, cyl_z(BEARING_D / 2 + 3, 0, 2 * BEARING_W + 0.8)])
+    rim = union([rim, cyl_z(BEARING_D / 2 + 3, 0, 2 * BEARING_W + BRG_GAP)])
     cuts = [cyl_z(BEARING_D / 2, -1, BEARING_W),
-            cyl_z(BEARING_D / 2, BEARING_W + 0.8, 2 * BEARING_W + 1.8),
+            cyl_z(BEARING_D / 2, BEARING_W + BRG_GAP, 2 * BEARING_W + BRG_GAP + 1),
             cyl_z(6.5, -1, 20)]
     for i in range(6):
         a = math.radians(i * 60 + 30)
         cuts.append(cyl_z(3.5, -1, HUB_T + 1, 15 * math.cos(a), 15 * math.sin(a), 32))
     return rim - union(cuts)
+
+
+def make_bearing_spacer():
+    """Проставка между внутренними кольцами двух 625ZZ: затяжка оси идёт по ней, а не через шарики."""
+    return cyl_z(4.0, 0, BRG_GAP, seg=48) - cyl_z(2.65, -1, BRG_GAP + 1, seg=32)
 
 
 def make_tire():
