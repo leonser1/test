@@ -24,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------- рама дрона ----------------
 SO_S, SO_D = 33.0, 5.0
+TUBE_RO = SO_D / 2 + 3.15         # стенка трубки 3.0 мм
 PLATE_GAP, PLATE_T, PLATE_FRONT_X = 35.0, 2.0, 6.0
 # ---------------- MG90S (замер: низ → ушки 16 мм) ----------------
 SV_L, SV_W, SV_H = 22.8, 12.2, 22.5
@@ -31,21 +32,22 @@ SV_BOSS_H, SV_BOSS_R, SV_SPL_H = 4.0, 5.8, 3.5
 SV_OFF = 5.5
 SV_TAB_L, SV_TAB_T, SV_TAB_Z = 32.5, 2.5, 16.0
 SV_SCREW = 27.8
+HORN_R = 12.0                    # плечо качалки (обрезать по 14 мм от центра), назад
 FIT = 0.4
 # ---------------- камера ----------------
 CAM_W, CAM_PIVOT = 19.0, 8.0
 CAM_LENGTHS = (20.0, 28.0)
 # ---------------- механизм ----------------
 X_P, Z_P = 23.5, 0.0
-BASE_X = (2.5, 6.5)
-ARM_T = 3.5                      # уши скобы
+BASE_X = (1.5, 6.5)                 # 5 мм: дно гнезда гайки 2.4
+ARM_T = 5.0                      # уши скобы (после кармана качалки 3.2 мм)
 CAM_IN = CAM_W / 2 + 0.25        # 19.5 между ушами скобы
 HORN_POCKET = 1.8                # карман под плечо качалки на наружной стороне левого уха скобы
 HUB_L = 3.0                      # ступица качалки (со стороны серво)
 BACK = (-7.0, -4.0)              # перемычка скобы позади оси
 SLOT = (9.0, 19.0)               # паз M2 камеры от оси: камеры 20…30 мм
 YOKE_FRONT = SLOT[1] + 4.0
-BOSS_R, BOSS_L = 5.0, 3.5        # бобышка оси на правом ухе скобы
+BOSS_R, BOSS_L = 6.0, 6.0        # бобышка оси на правом ухе скобы
 GAP = 0.5
 EAR_T = 5.0                      # правое ухо рамы
 FL_T = 4.0                       # фланец корпуса серво к раме
@@ -61,12 +63,12 @@ Y_CASE_TOP = Y_BOSS_TOP + SV_BOSS_H
 Y_SV_BOT = Y_CASE_TOP + SV_H
 Y_TAB_IN = Y_SV_BOT - SV_TAB_Z - SV_TAB_T             # грань ушка серво к шлицу
 Y_FLANGE0 = Y_CASE_TOP - 2.0                          # плита корпуса со стороны шлица (2 мм)
-Y_ER1 = Y_AR0 - BOSS_L - GAP                          # внутренняя грань правого уха рамы
+Y_ER1 = Y_AR0 - BOSS_L - GAP                         # внутренняя грань правого уха рамы
 Y_ER0 = Y_ER1 - EAR_T
 XR, XF, XC = -(SV_L / 2 - SV_OFF), SV_L / 2 + SV_OFF, SV_OFF
 ZW = SV_W / 2 + FIT
 HX0, HX1 = XR - FIT - WALL, XF + FIT + WALL            # корпус серво по X (от вала)
-Y_FL1 = Y_TAB_IN + 9.0                                # фланец до сюда (Y)
+Y_FL1 = Y_TAB_IN + 10.5                               # фланец до сюда (Y)
 BOLTS = [(Y_TAB_IN + 4.5, 9.0), (Y_TAB_IN + 4.5, -9.0)]
 
 COL = {"frame": (0.25, 0.42, 0.75), "house": (0.20, 0.55, 0.80), "print": (0.93, 0.55, 0.18),
@@ -80,16 +82,14 @@ def cyl_x(r, x0, x1, y, z, seg=24):
 
 # ---------------------------------------------------------------- рама
 def make_frame():
-    ro, gz = SO_D / 2 + 2.5, G - 0.2
-    parts = []
-    for s in (-1, 1):
-        y = s * SO_S / 2
-        parts.append(M.batch_hull([cyl_z(ro, -gz, gz, 0, y, 48), box(-0.5, 0.5, y - ro - 1.8, y - ro + 0.5, -gz, gz)]))
+    ro, gz = TUBE_RO, G - 0.2
+    parts = [cyl_z(ro, -gz, gz, 0, s * SO_S / 2, 48) for s in (-1, 1)]
     parts.append(box(*BASE_X, Y_ER0, Y_FL1, -gz, gz))
     parts.append(M.batch_hull([box(BASE_X[0], BASE_X[1] + 2, Y_ER0, Y_ER1, -gz, gz), cyl_y(9.5, Y_ER0, Y_ER1, X_P, Z_P, 48)]))
     f = union(parts)
     cuts = [cyl_z(SO_D / 2 + 0.15, -G - 1, G + 1, 0, s * SO_S / 2, 48) for s in (-1, 1)]
-    cuts.append(box(BASE_X[0] - 1, BASE_X[1] + 1, -11.5, 11.5, -9.0, 9.0))          # окно под провод серво
+    cuts.append(M.batch_hull([cyl_x(2.0, BASE_X[0] - 1, BASE_X[1] + 1, y, z)          # окно (облегчение), R2
+                              for y in (-4.0, 4.0) for z in (-7.0, 7.0)]))
     cuts.append(cyl_y(1.7, Y_ER0 - 1, Y_ER1 + 1, X_P, Z_P, 24))                       # ось M3
     for y, z in BOLTS:
         cuts.append(cyl_x(1.65, BASE_X[0] - 1, BASE_X[1] + 1, y, z))
@@ -108,7 +108,9 @@ def make_housing():
     fx0 = BASE_X[1] + 0.1
     flange = box(fx0, fx0 + FL_T, Y_FLANGE0, Y_FL1, -gz + 2, gz - 2)
     web = box(fx0, x0 + 0.01, Y_FLANGE0, Y_TAB_IN, Z_P - ZW - WALL, Z_P + ZW + WALL)
-    h = union([shell, flange, web] + ledges)
+    ribs = [M.batch_hull([box(fx0, x0, Y_FLANGE0, Y_TAB_IN, z0, z1), box(fx0, fx0 + FL_T + 0.5, Y_FL1 - 0.1, Y_FL1, z0, z1)])
+            for z0, z1 in ((12.3, gz - 2), (-gz + 2, -12.3))]                # косынки фланца
+    h = union([shell, flange, web] + ledges + ribs)
     cuts = [box(X_P + XR - FIT, X_P + XF + FIT, Y_CASE_TOP, Y_TAB_IN + 1, Z_P - ZW, Z_P + ZW),     # гнездо
             cyl_y(SV_BOSS_R + 0.7, Y_FLANGE0 - 1, Y_CASE_TOP + 0.5, X_P, Z_P, 48),               # выступ+шлиц
             box(X_P + XF - 0.5, X_P + XF + FIT + 2.6, Y_CASE_TOP + 1.0, Y_TAB_IN + 1, Z_P - 2.3, Z_P + 2.3)]  # кабель
@@ -128,20 +130,22 @@ def make_yoke():
     arms = []
     for y0, y1 in ((Y_AL0, Y_AL1), (Y_AR0, Y_AR1)):
         arms.append(M.batch_hull([box(BACK[0], BACK[1], y0, y1, -zh, zh), cyl_y(7.0, y0, y1, 0, 0, 48),
-                                  cyl_y(5.5, y0, y1, YOKE_FRONT - 5.5, 0, 40)]))
+                                  cyl_y(5.5, y0, y1, YOKE_FRONT - 5.5, 0, 40), cyl_y(5.0, y0, y1, -HORN_R, 0, 40),
+                                  box(-HORN_R, YOKE_FRONT - 5.5, y0, y1, -zh, -zh + 1)]))       # плоский низ на стол
     back = box(BACK[0], BACK[1], Y_AR0, Y_AL1, -zh, zh)
-    boss = cyl_y(BOSS_R, Y_AR0 - BOSS_L, Y_AR0 + 0.01, 0, 0, 40)
+    boss = M.batch_hull([cyl_y(BOSS_R, Y_AR0 - BOSS_L, Y_AR0 + 0.01, 0, 0, 40),
+                         box(-BOSS_R, BOSS_R, Y_AR0 - BOSS_L, Y_AR0 + 0.01, -zh, -zh + 1)])
     y = union(arms + [back, boss])
     cuts = []
-    # карман качалки на наружной стороне левого уха: ступица Ø9 + плечо назад (≈19 мм)
+    # карман качалки на наружной стороне левого уха: ступица Ø9 + плечо назад
     cuts.append(M.batch_hull([cyl_y(4.5, Y_AL1 - HORN_POCKET, Y_AL1 + 1, 0, 0, 40),
-                              cyl_y(2.4, Y_AL1 - HORN_POCKET, Y_AL1 + 1, 0, -15.0, 24)]))
+                              cyl_y(2.4, Y_AL1 - HORN_POCKET, Y_AL1 + 1, -HORN_R, 0, 24)]))
     cuts.append(cyl_y(1.6, Y_AL0 - 1, Y_AL1 + 1, 0, 0, 24))                     # центральный винт качалки
-    for r in (7.0, 9.0, 11.0, 13.0):
-        cuts.append(cyl_y(0.7, Y_AL0 + 0.6, Y_AL1, 0, -r, 12))                   # пилоты саморезов качалки
+    for r in (7.0, 9.0, 11.0):
+        cuts.append(cyl_y(0.7, Y_AL0 + 0.6, Y_AL1, -r, 0, 12))                   # пилоты саморезов качалки
     # ось M3 справа: отверстие + паз гайки M3 с нейлоном
     cuts.append(cyl_y(1.25, Y_AR0 - BOSS_L - 1, Y_AR1 + 1, 0, 0, 24))
-    cuts.append(box(-2.95, 2.95, Y_AR0 - BOSS_L + 0.8, Y_AR0 - BOSS_L + 5.0, -zh - 1, 3.4))
+    cuts.append(box(-2.95, 2.95, Y_AR0 - BOSS_L + 1.6, Y_AR0 - BOSS_L + 5.8, -zh - 1, 3.4))   # гайка M3 с нейлоном (4 мм), вставляется снизу
     # пазы M2 камеры
     for yy in (Y_AL0, Y_AR0):
         cuts.append(M.batch_hull([cyl_y(1.15, Y_AR0 - BOSS_L - 1, Y_AL1 + 1, SLOT[0], 0, 16),
@@ -152,7 +156,7 @@ def make_yoke():
 def horn():
     """Одноплечая качалка в кармане скобы (плечо назад-вниз), ступица к серво."""
     arm = M.batch_hull([cyl_y(4.1, Y_AL1 - HORN_POCKET + 0.1, Y_AL1 - 0.1, 0, 0, 32),
-                        cyl_y(2.0, Y_AL1 - HORN_POCKET + 0.1, Y_AL1 - 0.1, 0, -15.0, 24)])
+                        cyl_y(2.0, Y_AL1 - HORN_POCKET + 0.1, Y_AL1 - 0.1, -HORN_R, 0, 24)])
     hub = cyl_y(3.6, Y_AL1 - 0.1, Y_AL1 + HUB_L, 0, 0, 32)
     return union([arm, hub])
 
@@ -232,7 +236,7 @@ def check():
                 worst, at = v, (L, t)
     rep("ничего не задевает", worst < 0.5, f"{worst:.2f} мм³ {at or ''}")
     back = min(fr.bounding_box()[0], hs.bounding_box()[0])
-    rep("позади стоек пусто", back >= -(SO_D / 2 + 2.5) - 0.01, f"X min = {back:.1f}")
+    rep("позади стоек пусто", back >= -TUBE_RO - 0.01, f"X min = {back:.1f}")
     print(f"Ось X={X_P}, Z={Z_P}; серво Y {Y_CASE_TOP:.1f}…{Y_SV_BOT:.1f}; ширина {Y_SV_BOT - Y_ER0:.1f} мм")
     return ok
 
@@ -241,7 +245,7 @@ def check():
 PARTS = {
     "turret_v3_frame_x1": (make_frame, [0, 0, 0]),             # стоя, трубки вертикально
     "turret_v3_servo_housing_x1": (make_housing, [90, 0, 0]),   # плитой шлица вниз, гнездо открыто вверх
-    "turret_v3_yoke_x1": (make_yoke, [0, -90, 0]),             # перемычкой вниз, уши вверх
+    "turret_v3_yoke_x1": (make_yoke, [0, 0, 0]),              # плоским низом ушей на стол, слои вдоль ушей
 }
 
 
